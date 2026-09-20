@@ -115,6 +115,13 @@ The page is a single HTML file: no build, no CDN, no frontend dependencies.
   and compare single-shot vs. closed-loop play.
 - **It decides even when the ball isn't coming.** It answers "where should I wait for the next ball"
   instead of standing wherever it happens to be.
+- **The paddle is 160px tall (half-height 80px), and `T` cycles it** through 112 / 160 / 200px.
+  This is the single number that decides how often Jev returns the ball, and it is a *measured* choice:
+  replaying 232 real decisions, its landing estimate is off by a median of 47px (p75 69px), so a
+  56px half-height only covered **53%** of its answers while 80px covers **78%**. A real table-tennis
+  paddle is, proportionally, only ~48px tall — so this is already a generous size.
+  Changing it alters *the consequence of an error*, never the decision itself: the relay recomputes the
+  option grid from `paddle_half`, and the model still picks.
 - Hitting further from the paddle's centre returns a wider angle. The difficulty setting only changes
   Jev's **actuator speed limit** and its persona prompt, never its "brain".
 
@@ -127,6 +134,7 @@ The page is a single HTML file: no build, no CDN, no frontend dependencies.
 | Restart | `R` |
 | Difficulty (easy / normal / hard / grandmaster) | `1` `2` `3` `4` |
 | Single-shot vs. closed-loop | `K` |
+| Paddle size (112 / 160 / 200px) | `T` |
 | Mute | `M` |
 | Show/hide the model's commanded target line | `P` |
 | Open/close the JEV decision log | `L` |
@@ -205,6 +213,9 @@ that were **rejected** and the exact command behind every number.
   first-ask error of 157px drops to 26px by the last ask.
 - **Speed and thinking are in direct trade**: at a 551 cap a rally allows 3 decisions; at 332 it
   allowed 5. That trade-off is deliberate.
+- **Its placement error is intrinsic.** Median 47px on 232 real decisions. Neither relabelling the
+  options (ordinal names scored *worse*: 67px) nor changing the band count (9 bands: 69px) nor asking
+  earlier or later moved it. What *does* move the return rate is the paddle's tolerance — see `T`.
 
 ## Known trade-offs
 

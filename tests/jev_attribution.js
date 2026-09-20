@@ -33,20 +33,21 @@ var dead = false;
 
 function fold(y, lo, hi) { var s = hi - lo; var t = (y - lo) % (2 * s); if (t < 0) t += 2 * s; return t <= s ? lo + t : lo + (2 * s - t); }
 
+function P() { return window.__probe(); }   // 惰性取：__probe 是后面才挂上的
 function decide(state) {
   var tb = state.table, b = state.ball, you = state.you;
   var lo = tb.y_top + b.r, hi = tb.y_bottom - b.r, mid = (lo + hi) / 2;
   if (state.kind === 'serve') {
-    var sv = (mode === 'fixed') ? 152 : mid;
+    var sv = (mode === 'fixed') ? P().centerTop : mid;   // 用可达范围的最上端，别写死
     return { ok: true, move_to: sv, speed: you.max_speed, recover_to: sv, serve_vy: 0, model: 'audit', usage: { input_tokens: 1 }, cost_usd: 0 };
   }
   var arrival = mid;
   if (b.vx > 0 && you.paddle_x > b.x) arrival = fold(b.y + b.vy * ((you.paddle_x - b.r - b.x) / b.vx), lo, hi);
   var want = arrival;
-  if (mode === 'fixed') { want = 152; }
+  if (mode === 'fixed') { want = P().centerTop; }
   else if (mode === 'anti') { want = arrival < mid ? hi : lo; }        // 故意站到球的反方向
   else if (mode === 'chaos') { want = lo + ((calls.length * 41) % 100) / 100 * (hi - lo); }
-  var recover = (mode === 'fixed') ? 152 : arrival;
+  var recover = (mode === 'fixed') ? P().centerTop : arrival;
   return { ok: true, move_to: Math.round(want), speed: you.max_speed, recover_to: recover,
     model: 'audit', band: 'b?', band_center: Math.round(want), band_confidence: 0.5, band_probabilities: {},
     aim: 'flat', power: 0.5, usage: { input_tokens: 1 }, cost_usd: 0 };
@@ -108,9 +109,11 @@ for (var i = 0; i < 60 * 40; i++) {
   if (p && i > 240 && typeof p.jevCenter === 'number') { seen.min = Math.min(seen.min, p.jevCenter); seen.max = Math.max(seen.max, p.jevCenter); n++; }
 }
 print('# 探针实测：拍心范围 ' + seen.min.toFixed(1) + '~' + seen.max.toFixed(1) + '，采样 ' + n + ' 帧');
-pass('模型说「待在 y=152」→ 拍心真的钉在 152（没有本地追球）',
-  n > 100 && seen.max - 152 <= 2 && 152 - seen.min <= 2,
-  '拍心 ' + seen.min.toFixed(1) + '~' + seen.max.toFixed(1) + '（指令 152）');
+pass('模型说「钉在可达范围最上端」→ 拍心真的不动（没有本地追球）',
+  n > 100 && Math.abs(seen.max - P().centerTop) <= 2 && Math.abs(seen.min - P().centerTop) <= 2,
+  '拍心 ' + seen.min.toFixed(1) + '~' + seen.max.toFixed(1) +
+  '（指令 ' + P().centerTop.toFixed(1) + '，可达范围 ' + P().centerTop.toFixed(0) +
+  '~' + P().centerBottom.toFixed(0) + '）');
 
 /* ---------- 实验 2：模型说「去球的到达点」→ 接得住 ---------- */
 mode = 'perfect'; fresh();
