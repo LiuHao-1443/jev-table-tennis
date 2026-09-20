@@ -1,7 +1,9 @@
 # 实测记录：一个「零本地算法」评测仪是怎么调出来的
 
+[English README](README.md) · [中文 README](README.zh-CN.md)
+
 > 这是开发过程中的完整测量日志，对应于仓库里的 `index.html` / `server.py`。
-> 想看项目本身请回到 [`README.md`](README.md)。
+> 想看项目本身请回到 [README](README.md)。
 >
 > 里面每一条结论都有对应的命令和数字，包括**被否掉的方案**（更细的分档、TLS 会话复用、
 > 请求流水线、换代理节点）——它们和采纳的方案一样有价值。

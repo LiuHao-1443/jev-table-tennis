@@ -1,52 +1,60 @@
-# 人类 vs JEV · 乒乓球
+# Human vs JEV · Table Tennis
 
-> 右边那个球拍的**每一次移动**，都是 TypeSafe 的 [Jev](https://typesafe.ai)（System One 决策模型）现场算出来的。
-> 本地没有预测、没有兜底、没有「AI 辅助」——只剩查表和伺服。
+**English** · [中文](README.zh-CN.md)
 
-一句话：**这是一台用来观察一个决策模型「自己会不会打球」的仪器，顺便很好玩。**
+> Every single movement of the paddle on the right is decided live by [Jev](https://typesafe.ai),
+> TypeSafe's System One decision model. There is no local prediction, no fallback, no "AI assist" —
+> what's left on the client is a lookup table and a servo.
 
-一个 HTML 文件 + 一个 Python 中继，零依赖、零构建。你在左边用鼠标，Jev 在右边用脑子。
+In one sentence: **this is an instrument for watching whether a decision model can play table tennis
+by itself. It also happens to be fun.**
+
+One HTML file plus a small Python relay. No dependencies, no build step.
+You play on the left with a mouse; Jev plays on the right with its head.
 
 ```
-              ┌────────────────────────────────┐
-   浏览器 ───► │  index.html（Canvas 游戏）      │
-              │  · 物理、比分、绘制              │
-              │  · 四行伺服：把球拍推向指令位置    │
-              └──────────┬─────────────────────┘
-                         │  POST /jev/decide  （只发局面 + 问题）
-              ┌──────────▼─────────────────────┐
-              │  server.py（中继，保持长连接）    │
-              │  · 把局面写成一段文字             │
-              │  · 问一个选择题                  │
-              │  · 选项标签就是像素值，恒等查表     │
-              └──────────┬─────────────────────┘
-                         │  POST /v1/systemone    ← API key 只在这里
-              ┌──────────▼─────────────────────┐
-              │  api.typesafe.ai                │
-              └────────────────────────────────┘
+              ┌─────────────────────────────────┐
+   browser ──►│  index.html (Canvas game)        │
+              │  · physics, score, rendering     │
+              │  · a 4-line servo that pushes    │
+              │    the paddle to the commanded y │
+              └──────────┬──────────────────────┘
+                         │  POST /jev/decide  (state + question only)
+              ┌──────────▼──────────────────────┐
+              │  server.py (relay, keep-alive)   │
+              │  · renders the state as text     │
+              │  · asks a multiple-choice question
+              │  · the option label IS the pixel │
+              │    value — identity lookup       │
+              └──────────┬──────────────────────┘
+                         │  POST /v1/systemone   ← API key lives only here
+              ┌──────────▼──────────────────────┐
+              │  api.typesafe.ai                 │
+              └─────────────────────────────────┘
 ```
 
-## 它到底把什么交给了模型
+## What exactly is handed to the model
 
-这是这个项目真正想验证的东西：**一个只有「看局面、做选择」能力的纯决策模型，能打到什么程度？**
-所以边界划得很死。
+This is the point of the project: **if all a model can do is read a situation and pick an option,
+how well can it play?** So the boundary is drawn very tightly.
 
-| | 谁负责 |
+| | Who owns it |
 | --- | --- |
-| 球会落在哪、该站哪儿 | **Jev**（它选哪个选项，球拍就去哪个 y） |
-| 球不在飞来时该站哪儿等 | **Jev** |
-| 发球的弧度 | **Jev**（选一个弧度档） |
-| 球速上限 | 固定常数，**不随实测延迟变化**（否则测试条件会被被测对象自己改动） |
-| 物理、碰撞、比分、渲染 | 本地 |
-| 把球拍推向已被指定的位置 | 本地，就四行 |
+| Where the ball will land, where to stand | **Jev** — whichever option it picks is where the paddle goes |
+| Where to wait while the ball is not incoming | **Jev** |
+| The arc of its serve | **Jev** (it picks an arc bucket) |
+| The ball-speed cap | A fixed constant, **never derived from measured latency** — otherwise the test conditions could be moved by the thing under test |
+| Physics, collisions, scoring, rendering | Local |
+| Actually moving the paddle to the commanded y | Local — four lines |
 
 ```js
 const goalCenter = incoming ? brain.target : brain.recoverTo;
 const step = clamp(goalCenter - PH / 2 - jev.y, -limit * dt, limit * dt);
-if (brain.online !== false) jev.y += step;      // 掉线就站着不动，绝不本地代打
+if (brain.online !== false) jev.y += step;      // offline ⇒ it stands still, it never plays for itself
 ```
 
-**一次决策长这样。** 中继把局面写成一段文字，然后问一个选择题：
+**A single decision looks like this.** The relay renders the state as prose and asks one
+multiple-choice question:
 
 ```text
 The ball is at x=600, y=300, with velocity vx=700 px/s and vy=260 px/s. Its radius is 10 px.
@@ -57,131 +65,155 @@ Q: Where should the CENTRE of your paddle be when the ball reaches your line?
    a1 → paddle centre at y=178.6      a2 → y=231.9      a3 → y=285.2   ...
 ```
 
-它回答 `a4`，`a4` 就是 `y=338.5` —— **选项标签和像素值是同一张表**，本地不做任何换算。
+It answers `a4`, and `a4` *is* `y=338.5` — **the option label and the pixel value are the same
+table.** Nothing is converted locally.
 
-两个由 API 逼出来的设计（都不是我选的）：
+Two constraints the API forced on the design (neither was my choice):
 
-- **它不接受数字输出。** `type:"number"` / `"numeric"` 一律 `400 Invalid request.`。
-  「让它直接吐一个像素坐标」这条路是封死的，只能给选项。
-- **选项粒度不是越细越好。** 实测 7 档正确率 6/10，改成 40 细档掉到 **0/10**——
-  逼它做多步心算会直接答崩。所以 `placements_of()` 里那个 7 是量出来的，不是拍的。
+- **It does not emit numbers.** `type:"number"` and `type:"numeric"` both come back
+  `400 Invalid request.` So "just have it output a pixel coordinate" is a dead end; options are the
+  only channel.
+- **Finer options are not better.** With 7 bands it scores 6/10; with 40 narrow bands it drops to
+  **0/10** — forcing multi-step mental arithmetic makes it collapse. So the `7` in
+  `placements_of()` is a measured value, not a guess.
 
-## 快速开始
+## Quick start
 
 ```bash
-# 1. 填 key（二选一）
-export TYPESAFE_API_KEY=你的key
-#    或者 cp jev.config.example.json jev.config.json 再填进去
+# 1. provide a key (either way)
+export TYPESAFE_API_KEY=your_key
+#    or: cp jev.config.example.json jev.config.json  and fill it in
 
-# 2. 起服务
+# 2. start the relay
 python3 server.py
 
-# 3. 打开它打印出来的地址
+# 3. open whatever URL it prints
 #    http://127.0.0.1:8760/
 ```
 
-只要有 Python 3，**不需要 pip install 任何东西**（只用标准库）。
-页面是单个 HTML，无构建步骤、无 CDN、无前端依赖。
+You need Python 3 and nothing else — **no `pip install`**, standard library only.
+The page is a single HTML file: no build, no CDN, no frontend dependencies.
 
-## 规则
+## Rules
 
-- **你在左边，JEV 在右边**。每局 11 分，10:10 后净胜 2 分且每分换发球，先赢 3 局者胜。
-- **球速会越打越快**：发球放在上限的 70%（386 px/s），**每被球拍击中一次 ×1.10**，
-  到上限（551 px/s）就不再涨。撞墙不加速。想改：
+- **You are on the left, JEV on the right.** 11 points per game, win by 2 after 10:10 with serve
+  alternating every point, best of 3 games.
+- **The ball keeps speeding up.** The serve starts at 70% of the cap (386 px/s), and **every hit
+  multiplies the speed by 1.10** until it reaches the cap (551 px/s). Wall bounces don't speed it up.
+  To change the cap:
 
   ```bash
-  python3 server.py --cap 450     # 更慢更稳（一板里它能算 4 次）
-  python3 server.py --cap 700     # 更快更难（只剩 2 次）
+  python3 server.py --cap 450     # slower, calmer (4 decisions per rally)
+  python3 server.py --cap 700     # faster, harder (only 2 decisions)
   ```
 
-  上限不是拍脑袋定的，是从**实测的决策延迟**倒推：单程飞行必须容得下
-  「最后一次决策往返 0.55s + 机械臂横跨全台 0.42s + 至少一次修正机会 0.55s」
-  ⇒ `964 / 1.75 ≈ 551 px/s`。
-- **一板球问多次**。球飞向它的 1.75 秒里，它一问接一问地修正，最终停位听**最后一次**。
-  按 `K` 可以关掉，对比单判和多判的差别。
-- **球不在飞来时也要决定**。它会回答「我该站在哪等下一板」，而不是停在原地。
-- 击球点越靠拍边，回球角度越大；档位只改 Jev 的**机械限速**和人格提示词，不改它的脑子。
+  The default cap is not arbitrary — it is back-solved from the **measured decision latency**: a
+  single flight has to fit "last decision round trip 0.55s + arm crossing the whole table 0.42s +
+  at least one correction opportunity 0.55s" ⇒ `964 / 1.75 ≈ 551 px/s`.
+- **It gets asked several times per rally.** During the 1.75s the ball is in flight it re-asks and
+  re-corrects, and its final resting position obeys the **last** answer. Press `K` to turn this off
+  and compare single-shot vs. closed-loop play.
+- **It decides even when the ball isn't coming.** It answers "where should I wait for the next ball"
+  instead of standing wherever it happens to be.
+- Hitting further from the paddle's centre returns a wider angle. The difficulty setting only changes
+  Jev's **actuator speed limit** and its persona prompt, never its "brain".
 
-## 玩法与按键
+## Controls
 
-| 操作 | 按键 |
+| Action | Key |
 | --- | --- |
-| 移动球拍 | 鼠标移动 / 触屏拖动 / `W` `S` / `↑` `↓` |
-| 暂停、继续 | `空格` |
-| 重新开始 | `R` |
-| 切换档位（轻松/普通/困难/宗师） | `1` `2` `3` `4` |
-| 单判 / 一板多判 | `K` |
-| 静音 | `M` |
-| 显示/隐藏模型指令线 | `P` |
-| 打开/关闭 JEV 决策日志 | `L` |
+| Move paddle | mouse / touch drag / `W` `S` / `↑` `↓` |
+| Pause, resume | `Space` |
+| Restart | `R` |
+| Difficulty (easy / normal / hard / grandmaster) | `1` `2` `3` `4` |
+| Single-shot vs. closed-loop | `K` |
+| Mute | `M` |
+| Show/hide the model's commanded target line | `P` |
+| Open/close the JEV decision log | `L` |
 
-HUD 上能看到它在想什么：指令线旁是它选的落点和置信度，底部是它的反应速度和球速上限。
-右下角的决策日志里**每一次决策的完整过程**都在——它看到了什么、被问了什么、
-每个选项的分布是什么、花了多少 token、这次是第几次修正。刷新页面也不会丢（存在服务端）。
+The HUD shows what it's thinking: the target line carries its chosen landing spot and confidence, the
+bottom bar its reaction speed and the current speed cap. The decision log (bottom right) holds **the
+full record of every decision** — what it saw, what it was asked, how probability mass was distributed
+across the options, how many tokens it cost, and which correction round this was. It survives a page
+reload (it is stored server-side).
 
-## 配置
+## Configuration
 
-| 位置 | 说明 |
+| Where | What |
 | --- | --- |
-| `TYPESAFE_API_KEY` 环境变量 | 优先级最高 |
-| `jev.config.json` | 复制 `jev.config.example.json` 再改；**已在 .gitignore 里** |
-| `--mode pure` / `assisted` | 默认 `pure`（纯驱动）；`assisted` 是带本地辅助的对照版 |
-| `--cap N` | 球速上限（px/s） |
-| `--host 127.0.0.1` | 只绑本机（默认 `0.0.0.0`，让局域网里的人也能一起玩） |
-| `--mock-brain` | 用测试替身代替真模型，不花 token、不联网 |
+| `TYPESAFE_API_KEY` env var | Highest priority |
+| `jev.config.json` | Copy `jev.config.example.json` and edit; **already in .gitignore** |
+| `--mode pure` / `assisted` | Defaults to `pure`; `assisted` is the control version with local helpers |
+| `--cap N` | Ball-speed cap (px/s) |
+| `--host 127.0.0.1` | Bind loopback only (default `0.0.0.0`, so people on your LAN can play) |
+| `--mock-brain` | Swap in a test double — no tokens, no network |
 
-## 多人一起玩
+## Playing with other people
 
-服务默认监听 `0.0.0.0`，启动时会打印局域网地址，把那个地址发给同一个房间的人即可。
-页面**不用为每个人单独配置**：客户端的默认中继地址是 `location.origin`，
-所以别人用你的 IP 打开页面时，它会自动连**你的** IP。
+The relay listens on `0.0.0.0` and prints your LAN URL at startup; send that URL to anyone in the room.
+Nothing has to be configured per player: the client's default relay URL is `location.origin`, so when
+someone opens your IP, the page talks to **your** IP rather than to their own `127.0.0.1`.
 
-一条 keep-alive 连接一次只能跑一个请求，所以中继开了 **4 个连接的池子**：
-实测三个人同时打，每人每板的中位耗时和单人时是同一个数（~360ms），互不排队。
+A keep-alive connection can only carry one request at a time, so the relay runs a **pool of 4
+connections**. Measured with three simultaneous players, each player's per-decision median stayed at
+the single-player number (~360ms) — no queueing.
 
-## 安全
+## Security
 
-- **API key 只存在于 `server.py` 进程里。** 页面里没有任何凭据，抓包也拿不到；
-  它也不会进 git（`jev.config.json` 被 `.gitignore` 挡住，`tests/` 里另有 pre-commit 守卫）。
-- **这个中继没有认证。** 谁能访问那个地址，谁就能花你的 token。
-  自己家/自己办公室的局域网没问题，**不要往公网上放**。
-- 成本本身很低：实测一次决策约 918 输入 token，官方价 $42/Btok、输出免费
-  ⇒ **约 $0.00004 一次**；开了闭环多判，一板约问 3~5 次，打一局（几百次决策）大约几美分。
+- **The API key lives only inside the `server.py` process.** There is no credential in the page, so
+  sniffing the traffic gets you nothing, and it cannot reach git (`jev.config.json` is gitignored and
+  guarded by a pre-commit hook in `tests/`).
+- **The relay is unauthenticated.** Anyone who can reach the address can spend your tokens. Fine on
+  your own LAN, **do not put it on the public internet**.
+- The cost is genuinely small: one decision is ~918 input tokens, and at the official $42/Btok with
+  free output that is **~$0.00004 per decision**. With the closed loop a rally asks 3–5 times, so a
+  full game (a few hundred decisions) costs a few cents.
 
-## 测试
+## Tests
 
 ```bash
 ./tests/run_all.sh
 ```
 
-**全部离线**：模型调用一律被桩替换，不花 token、不碰网络。10 项，覆盖
+**Entirely offline** — every model call is replaced by a stub, so it costs no tokens and touches no
+network. Ten checks covering:
 
-- 语法、界面、决策日志
-- **球速爬坡**：起步 70%、每档 ×1.10、只涨不跌、永不超过上限、会停在上限
-- **闭环多判**：一板问多次、再问一次确实把落点算得更准、最终停位听最后一次
-- **待命位**：只改「等下一板的位置」，绝不覆盖正在进行的拦截目标
-- **超时 ≠ 掉线**：对方卡住时拍子继续执行上一个指令，不冻住、也不误判掉线
-- **归因审计**：模型说对时命中率 ~100%，故意说反时 0%，掉线时一格不动
-- **纯模式**：确认本地只剩查表 + 伺服
-- **陈旧连接**：撑住 30 秒的假服务端 ⇒ 1203ms 返回（对照：不修是 30004ms）
+- Syntax, UI, decision log
+- **Speed ramp**: starts at 70%, ×1.10 per rung, never decreases, never exceeds the cap, stops at it
+- **Closed loop**: multiple asks per rally, re-asking measurably improves the landing estimate, and
+  the final resting position obeys the last answer
+- **Ready position**: only changes the "where to wait" target, never overrides an interception in flight
+- **Timeout ≠ offline**: when the API hangs, the paddle keeps executing its last order — it neither
+  freezes nor gets misreported as offline
+- **Attribution audit**: ~100% hit rate when the model is right, 0% when it is deliberately inverted,
+  and not a single pixel of movement while it is offline
+- **Pure mode**: confirms nothing but a lookup table and a servo is left locally
+- **Stale connection**: a fake server that stalls for 30s ⇒ returns in 1203ms (vs. 30004ms unfixed)
 
-## 实测结论（摘要）
+## Measured results (summary)
 
-完整记录在 [`FINDINGS.md`](FINDINGS.md)，包括**被否掉的方案**和逐条命令。
+The full log lives in [`FINDINGS.md`](FINDINGS.md) *(written in Chinese)*, including the approaches
+that were **rejected** and the exact command behind every number.
 
-- **每一步 ~350ms 里，模型自己只想 24ms。** 极小请求 313ms vs 完整请求 337ms，
-  差值就是它的思考时间；剩下是网络往返（~200ms）和 API 服务端开销（~110ms）。
-- **最该修的是连接复用**：每次重做 TLS 握手要 0.45~1.5s，改成 keep-alive 之后每步降到 ~350ms。
-- **7 档正好，40 档崩成 0/10。**
-- **闭环多判确实在修正**：假模型「越近越准」时，首判误差 157px → 末判 26px。
-- **速度与脑子是直接交换**：上限 551 时一板能算 3 次，332 时能算 5 次。这是刻意的取舍。
+- **Of the ~350ms per step, the model itself thinks for 24ms.** A minimal request takes 313ms vs 337ms
+  for a full one; the difference is its thinking time. The rest is network round trip (~200ms) and API
+  server-side overhead (~110ms).
+- **The biggest single win was connection reuse**: redoing the TLS handshake cost 0.45–1.5s per step;
+  switching to keep-alive brought each step down to ~350ms.
+- **7 bands is right; 40 bands collapses to 0/10.**
+- **The closed loop really corrects**: with a stub that gets more accurate as the ball approaches, the
+  first-ask error of 157px drops to 26px by the last ask.
+- **Speed and thinking are in direct trade**: at a 551 cap a rally allows 3 decisions; at 332 it
+  allowed 5. That trade-off is deliberate.
 
-## 已知取舍
+## Known trade-offs
 
-- Jev 越打越快，但一板里的决策次数会随之减少——速度和决策质量不可兼得。
-- 中继无认证，**只适合内网**。
-- 球速上限是常数而非自适应，这是刻意为了「测试条件不被被测对象移动」。
+- The faster Jev plays, the fewer decisions fit into a single rally — speed and decision quality
+  cannot both be maximized.
+- The relay has no authentication; **LAN only**.
+- The speed cap is a constant rather than adaptive, deliberately, so that the test conditions cannot
+  be moved by the thing under test.
 
 ## License
 
-MIT，见 [`LICENSE`](LICENSE)。
+MIT — see [`LICENSE`](LICENSE).
