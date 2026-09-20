@@ -222,8 +222,11 @@ that were **rejected** and the exact command behind every number.
   (`place`), or where to wait (`ready`), or which serve arc (`serve`). Everything else on a decision-log
   line (latency, tokens, cost, score, the servo speed limit) is local bookkeeping; the log used to also
   print two dead `aim`/`power` fields left over from the assisted baseline, which never reach the physics.
-- **Speed and thinking are in direct trade**: at a 551 cap a rally allows 3 decisions; at 332 it
-  allowed 5. That trade-off is deliberate.
+- **Speed and thinking are in direct trade, and it is measurable.** The relay's default 551 px/s cap
+gives JEV 3 asks per rally with 0.78s of slack; 650 gives 2 asks; 900 collapses to 1 (no closed-loop
+correction left). Its *last* ask — the one that decides the point — is also the most accurate
+(25px vs 37px for the first ask), because it is asked when the ball is closest; a faster ball pushes
+that last ask farther away and grows its error. `python3 server.py --cap N` changes it.
 - **Its placement error is intrinsic to the question it is asked.** Median 47px on 232 real
   decisions. Neither relabelling the options (ordinal names scored *worse*: 67px) nor changing the band
   count (9 bands: 69px) nor asking earlier or later moved it. What *does* move it is the amount of

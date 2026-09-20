@@ -30,6 +30,7 @@ import http.client
 import queue
 import mimetypes
 import os
+import re
 import sys
 import threading
 import time
@@ -900,17 +901,56 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, body, ctype, cors=False)
 
 
+def _ip_score(ip):
+    """越小越像「同一个房间里别人能用」的地址。"""
+    if ip.startswith("192.168."):
+        return 0
+    if ip.startswith("10."):
+        return 1
+    if re.match(r"172\.(1[6-9]|2\d|3[01])\.", ip):
+        return 2
+    return 3
+
+
+def _usable_lan_ip(ip):
+    if not re.match(r"^\d+\.\d+\.\d+\.\d+$", ip or ""):
+        return False
+    if ip.startswith(("127.", "169.254.")):
+        return False
+    # Clash / Surge 之类的 fake-ip 段：本机连得通，但发给别人打不开
+    if ip.startswith(("198.18.", "198.19.")):
+        return False
+    return True
+
+
 def lan_ip():
-    """本机的局域网地址（给别人用的那个）。"""
+    """本机的局域网地址（给别人用的那个）。
+
+    不能用「连一下 8.8.8.8 看内核选哪张网卡」这个常见写法：开了代理时默认路由会走
+    utun，拿回来的是 198.18.x.x（fake-ip 段），发给别人打不开。
+    改成枚举所有网卡地址，优先挑真正的私有网段。
+    """
     import socket as _s
+    import subprocess as _sp
+    cands = []
+    try:
+        cmd = ["ifconfig"] if sys.platform == "darwin" else ["ip", "-4", "addr"]
+        out = _sp.run(cmd, capture_output=True, text=True, timeout=5).stdout
+        cands += re.findall(r"inet (?:addr:)?(\d+\.\d+\.\d+\.\d+)", out)
+    except Exception:
+        pass
     try:
         _t = _s.socket(_s.AF_INET, _s.SOCK_DGRAM)
         _t.connect(("10.255.255.255", 1))      # 不真的发包，只为让内核挑出出口网卡
-        ip = _t.getsockname()[0]
+        cands.append(_t.getsockname()[0])
         _t.close()
-        return ip
     except Exception:
-        return "本机局域网IP"
+        pass
+    good = [ip for ip in dict.fromkeys(cands) if _usable_lan_ip(ip)]
+    if not good:
+        return "127.0.0.1"
+    good.sort(key=_ip_score)
+    return good[0]
 
 
 def main():
