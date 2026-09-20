@@ -8,6 +8,7 @@ tail = "\n})();\n"
 assert body.endswith(tail), repr(body[-40:])
 probe = """window.__probe = function () {
   return { sentState: function (kind) { return buildState(kind || 'incoming'); },
+           maxBounce: MAX_BOUNCE,
            jevTop: jev.y, jevCenter: jev.y + PH / 2, jevX: jev.x, jevVy: jev.vy,
            paddleHalf: PH / 2, centerTop: WALL_T + PH / 2, centerBottom: WALL_B - PH / 2,
            target: brain.target, recoverTo: brain.recoverTo, speed: brain.speed,

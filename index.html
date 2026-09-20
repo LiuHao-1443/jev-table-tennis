@@ -146,8 +146,8 @@
       <button class="btn" id="btnStart">开始比赛</button>
       <div class="keys">
         <kbd>鼠标移动</kbd> 或 <kbd>W</kbd>/<kbd>S</kbd>、<kbd>↑</kbd>/<kbd>↓</kbd> 控制球拍 ·
-        <kbd>空格</kbd> 暂停 · <kbd>R</kbd> 重开 · <kbd>1</kbd>~<kbd>4</kbd> 换档位 · <kbd>K</kbd> 单判/多判 ·
-        <kbd>T</kbd> 换拍高 · <kbd>M</kbd> 静音 · <kbd>P</kbd> 显示模型指令 · <kbd>L</kbd> 决策日志
+        <kbd>空格</kbd> 暂停 · <kbd>R</kbd> 重开 · <kbd>1</kbd>~<kbd>4</kbd> 换档位 · <kbd>K</kbd> 单判/多判 · <kbd>T</kbd> 拍高 ·
+        <kbd>B</kbd> 球的角度 · <kbd>M</kbd> 静音 · <kbd>P</kbd> 显示模型指令 · <kbd>L</kbd> 决策日志
       </div>
     </div>
   </div>
@@ -201,18 +201,27 @@ const TABLE = { x: 18, y: 96, w: W - 36, h: H - 140 };
 const WALL_T = TABLE.y, WALL_B = TABLE.y + TABLE.h;
 const NET_X = W / 2;
 const PW = 16, PMARGIN = 66;
-/* 拍高（可调，T 键循环）。容错就是半高：
-   拿 232 次真实对局复盘，JEV 的落点误差 p50=48px、p75=69px、p90=132px，
-   半高 56px 时它 53% 的决策够得着，80px 时 78%，再往上就平了（因为 p90 已经跳到 132px）。
-   参考：真实乒乓球拍按台面比例只有约 48px 高，所以这已经是放大过的尺寸。 */
+/* 拍高（T 键循环）。⚠️ 容错就是半高，也就是「考卷」——
+   把它调大确实能让回球率变好看，但那测的就不是模型了（调到全屏必然 100%）。
+   所以默认保持标准 112px，T 键只用来做对照实验：看同一批决策在不同容错下会怎样。 */
 const PADDLE_HALVES = [56, 80, 100];
 const PADDLE_LABELS = ['标准 112px', '加高 160px', '超大 200px'];
-let paddleIdx = 1;
+let paddleIdx = 0;   // 0 = 标准 112px。容错是考卷，默认不动它
 let PH = PADDLE_HALVES[paddleIdx] * 2;
 const HUMAN_X = TABLE.x + PMARGIN;
 const JEV_X = TABLE.x + TABLE.w - PMARGIN - PW;
 const R = 10;
-const BASE_SPEED = 430, MAX_SPEED = 1180, SPEEDUP = 1.10, MAX_BOUNCE = 0.92;
+const BASE_SPEED = 430, MAX_SPEED = 1180, SPEEDUP = 1.10;
+/* 击球角度上限（B 键循环）。这是「让它心算多远」的旋钮，而不是容错：
+   复盘 232 次真实决策，JEV 的落点误差 ≈ 16.8 + 0.421 ×（它要在 y 上心算的距离），
+   相关性 r=0.57 —— 它不是不会做决定，是做不了「|vy| × 飞行时间」这种多步心算
+   （和当初「40 档分解成 0/10」是同一个毛病）。
+   把角度从 0.92 收到 0.55，要心算的距离缩到约 60%，预计误差 62px → 44px。
+   参考：真实乒乓球回球角度大多在 0.2~0.5 rad。 */
+const MAX_BOUNCES = [0.92, 0.55, 0.35];
+const MAX_BOUNCE_LABELS = ['陡 0.92（原值）', '中 0.55', '平 0.35'];
+let bounceIdx = 1;
+let MAX_BOUNCE = MAX_BOUNCES[bounceIdx];
 /* 一板球（一次发球到得分之间）的球速是「逐渐加速」的：
    起始 = 上限的 70%，每被球拍击一次 ×SPEEDUP（撞墙不加速），到上限就不再涨。
    62% + ×1.10 ⇒ 约 5 板追上上限，正好在一场普通回合（3~5 板）里就能感觉到越打越快。
@@ -496,6 +505,7 @@ window.addEventListener('keydown', e => {
   else if (k === 'l' || k === 'L') { setLogOpen(!brain.logOpen); }
   else if (k === 'k' || k === 'K') { brain.multi = !brain.multi; brain.round = 0; }
   else if (k === 't' || k === 'T') { setPaddleSize(paddleIdx + 1); }
+  else if (k === 'b' || k === 'B') { setBounce(bounceIdx + 1); }
   else if ('1234'.includes(k)) { setDifficulty(ORDER[+k - 1]); }
 });
 window.addEventListener('keyup', e => { keys[e.key] = false; keys[e.key.toLowerCase()] = false; });
@@ -525,6 +535,16 @@ function setDifficulty(k) {
   buildLevelButtons();
 }
 function show(el, on) { el.classList.toggle('show', on); }
+
+/* 换击球角度上限：球变平 ⇒ 它要心算的 y 距离变短 ⇒ 误差真的变小。
+   正在飞的这板球作废重问：物理参数变了。 */
+function setBounce(i) {
+  bounceIdx = ((i % MAX_BOUNCES.length) + MAX_BOUNCES.length) % MAX_BOUNCES.length;
+  MAX_BOUNCE = MAX_BOUNCES[bounceIdx];
+  brain.askedKey = ''; brain.nextRetryAt = 0;
+  banner = { text: '击球角度 ' + MAX_BOUNCE_LABELS[bounceIdx],
+             sub: '球越平，它要心算的纵向距离越短（B 键继续换）', life: 1.6 };
+}
 
 /* 换拍子尺寸：保持拍心位置不变（jev.y 是拍顶，所以要跟着重算），
    并把正在飞的这板球作废重问——尺寸变了，原来的答案是按旧网格给的。 */
@@ -1343,7 +1363,8 @@ function drawHUD() {
       '延迟 ' + brainLatencyS().toFixed(1) + 's' +
       (brain.multi ? (brain.round > 0 ? ' ×' + (brain.round + 1) : ' ×1') : ' 单判') +
       ' · 球速上限 ' + Math.round(cap) + ' px/s' +
-      ' · 拍高 ' + PH + 'px',
+      ' · 拍高 ' + PH + 'px' +
+      ' · 球角 ≤' + MAX_BOUNCE.toFixed(2) + ' rad',
       NET_X - span, ly);
     ctx.textAlign = 'right';
     const judged = brain.judgeHit + brain.judgeMiss;

@@ -115,13 +115,19 @@ The page is a single HTML file: no build, no CDN, no frontend dependencies.
   and compare single-shot vs. closed-loop play.
 - **It decides even when the ball isn't coming.** It answers "where should I wait for the next ball"
   instead of standing wherever it happens to be.
-- **The paddle is 160px tall (half-height 80px), and `T` cycles it** through 112 / 160 / 200px.
-  This is the single number that decides how often Jev returns the ball, and it is a *measured* choice:
-  replaying 232 real decisions, its landing estimate is off by a median of 47px (p75 69px), so a
-  56px half-height only covered **53%** of its answers while 80px covers **78%**. A real table-tennis
-  paddle is, proportionally, only ~48px tall — so this is already a generous size.
-  Changing it alters *the consequence of an error*, never the decision itself: the relay recomputes the
-  option grid from `paddle_half`, and the model still picks.
+- **The paddle is a standard 112px tall — and it is deliberately *not* the tuning knob.**
+  Replaying 232 real decisions, Jev's landing error is a median 47px, so a 112px paddle only covers
+  **53%** of its answers. Enlarging it is tempting and wrong: enlarge it to the whole screen and it
+  returns 100% of balls, at which point the number says nothing about the model and can never fail.
+  Paddle half-height *is* the tolerance — the marking scheme. `T` cycles it as a **control** for
+  comparison experiments; the default stays standard.
+- **What actually moves the return rate is how far Jev must project in y.** Its error is
+  ≈ 16.8 + 0.421 × (the y-distance it has to extrapolate), r = 0.57: 23px when the ball barely moves
+  vertically, 69px when it must project 100–200px. It can't do "|vy| × flight time" in its head.
+  So the ball's max bounce angle is capped at **0.55 rad** (was 0.92): flatter balls require less
+  mental arithmetic, and the error shrinks for real. The tolerance stays untouched at 112px, and the
+  claim is falsifiable — if the next session's median error isn't near 40px, the fix failed.
+  `B` cycles it. For reference, real table tennis return angles are mostly 0.2–0.5 rad.
 - Hitting further from the paddle's centre returns a wider angle. The difficulty setting only changes
   Jev's **actuator speed limit** and its persona prompt, never its "brain".
 
@@ -135,6 +141,7 @@ The page is a single HTML file: no build, no CDN, no frontend dependencies.
 | Difficulty (easy / normal / hard / grandmaster) | `1` `2` `3` `4` |
 | Single-shot vs. closed-loop | `K` |
 | Paddle size (112 / 160 / 200px) | `T` |
+| Ball angle cap (0.92 / 0.55 / 0.35 rad) | `B` |
 | Mute | `M` |
 | Show/hide the model's commanded target line | `P` |
 | Open/close the JEV decision log | `L` |
@@ -213,9 +220,10 @@ that were **rejected** and the exact command behind every number.
   first-ask error of 157px drops to 26px by the last ask.
 - **Speed and thinking are in direct trade**: at a 551 cap a rally allows 3 decisions; at 332 it
   allowed 5. That trade-off is deliberate.
-- **Its placement error is intrinsic.** Median 47px on 232 real decisions. Neither relabelling the
-  options (ordinal names scored *worse*: 67px) nor changing the band count (9 bands: 69px) nor asking
-  earlier or later moved it. What *does* move the return rate is the paddle's tolerance — see `T`.
+- **Its placement error is intrinsic to the question it is asked.** Median 47px on 232 real
+  decisions. Neither relabelling the options (ordinal names scored *worse*: 67px) nor changing the band
+  count (9 bands: 69px) nor asking earlier or later moved it. What *does* move it is the amount of
+  arithmetic — see the bounce-angle finding in [`FINDINGS.md`](FINDINGS.md).
 
 ## Known trade-offs
 

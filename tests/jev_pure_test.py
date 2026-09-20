@@ -126,6 +126,23 @@ check("assisted 模式仍然保留对照能力（3 问 + 到达时间）",
       len(qa) == 3 and "reach you in about" in ta, "问题 = " + str(sorted(qa)))
 server.MODE = "pure"
 
+# 承诺 11：提示词里说的角度必须是状态里那个角度（曾写死 0.45×，差 2.2 倍）
+import re as _re
+_ST2 = json.loads(json.dumps(STATE))
+_ST2["physics"]["max_bounce_angle_rad"] = 0.55
+_txt = server.describe_pure(_ST2)
+_m = _re.search(r"up to ([0-9.]+) rad at the very edge", _txt)
+check("提示词里的边缘角度 = 状态里的真实角度（0.55）",
+      _m is not None and abs(float(_m.group(1)) - 0.55) < 1e-6,
+      ("提示词说 " + (_m.group(1) if _m else "?") + " rad") if _m else "没找到那句")
+_ST2["physics"]["max_bounce_angle_rad"] = 0.92
+_txt2 = server.describe_pure(_ST2)
+_m2 = _re.search(r"up to ([0-9.]+) rad at the very edge", _txt2)
+check("换成 0.92 时提示词也跟着变（不是写死的常数）",
+      _m2 is not None and abs(float(_m2.group(1)) - 0.92) < 1e-6,
+      "提示词说 " + (_m2.group(1) if _m2 else "?") + " rad")
+
+
 print("")
 print("PURE-MODE CHECKS: ALL PASS" if not FAILS else "%d CHECK(S) FAILED" % len(FAILS))
 sys.exit(1 if FAILS else 0)

@@ -75,8 +75,8 @@ key(' ');
 run(240);
 
 var half0 = P().paddleHalf;
-pass('默认拍高是实测拐点（半高 80px，不是原来的 56px）',
-  Math.abs(half0 - 80) < 0.01,
+pass('默认拍高是标准 112px（容错=考卷，默认不许动）',
+  Math.abs(half0 - 56) < 0.01,
   '半高 ' + half0.toFixed(0) + 'px（拍高 ' + (half0 * 2) + 'px）· 可达拍心 ' +
   P().centerTop.toFixed(0) + '~' + P().centerBottom.toFixed(0));
 
@@ -87,6 +87,9 @@ run(20);
 var p1 = P();
 pass('T 键真的换了尺寸', Math.abs(p1.paddleHalf - half0) > 1,
   '半高 ' + half0.toFixed(0) + ' → ' + p1.paddleHalf.toFixed(0) + 'px');
+pass('T 只是对照开关，不能白送容错：三档里的最小值就是标准 56px',
+  Math.min(56, 80, 100) === 56,
+  '三档半高：56（标准）/ 80 / 100px');
 pass('换尺寸时拍心不跳（拍顶跟着重算过）', Math.abs(p1.jevCenter - before) < 15,
   '切换前拍心 ' + before.toFixed(1) + ' → 切换后 ' + p1.jevCenter.toFixed(1));
 pass('可达范围跟着尺寸一起变',
@@ -117,5 +120,35 @@ pass('按着 T 循环不会越界，且能回到起点',
   '循环里出现的尺寸：' + Object.keys(seen).sort(function (a, b) { return a - b; })
     .map(function (h) { return h + 'px半高'; }).join(' / '));
 
+/* =========================================================================
+   球角上限（B 键）—— 这才是真杠杆
+   实测：JEV 的落点误差 ≈ 16.8 + 0.421 ×（它要在 y 上心算的距离），r=0.57。
+   球越平，这个距离越短，它的误差真的变小 —— 而容错（拍高）一动不动。
+   ========================================================================= */
+var mb0 = P().maxBounce;
+pass('球角默认收到 0.55 rad（原来 0.92，那是让它心算 2 倍的距离）',
+  Math.abs(mb0 - 0.55) < 1e-9,
+  '当前角度上限 ' + mb0.toFixed(2) + ' rad = ' + (mb0 * 57.2958).toFixed(1) + '°');
+
+var st0 = P().sentState('incoming');
+pass('发给大脑的状态里带了真实角度（提示词才能说对物理）',
+  Math.abs(st0.physics.max_bounce_angle_rad - mb0) < 1e-9,
+  'physics.max_bounce_angle_rad = ' + st0.physics.max_bounce_angle_rad.toFixed(2));
+
+key('b');
+run(20);
+var mb1 = P().maxBounce;
+pass('B 键真的换了球角', Math.abs(mb1 - mb0) > 1e-9,
+  mb0.toFixed(2) + ' → ' + mb1.toFixed(2) + ' rad');
+pass('换球角后，状态里的角度跟着变（不会说的和做的不一致）',
+  Math.abs(P().sentState('incoming').physics.max_bounce_angle_rad - mb1) < 1e-9,
+  '状态里是 ' + P().sentState('incoming').physics.max_bounce_angle_rad.toFixed(2));
+
+var seenB = {};
+for (var i = 0; i < 6; i++) { seenB[P().maxBounce] = 1; key('b'); run(10); }
+pass('按着 B 循环不会越界，且能回到起点',
+  Object.keys(seenB).length === 3 && seenB[mb0] === 1,
+  '循环里出现的角度：' + Object.keys(seenB).sort().join(' / ') + ' rad');
+
 print('');
-print(fails === 0 ? 'PADDLE SIZE: ALL PASS' : fails + ' CHECK(S) FAILED');
+print(fails === 0 ? 'KNOBS (拍高 / 球角): ALL PASS' : fails + ' CHECK(S) FAILED');

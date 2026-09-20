@@ -302,7 +302,7 @@ def describe_pure(state):
         "reaches x=%.0f. You hit the ball with whatever part of your face it touches: touching your exact center "
         "sends it straight back, touching lower sends it upward, touching higher sends it downward, with the angle "
         "growing up to %.2f rad at the very edge. Your face moves at up to %.0f px/s."
-        % (px, 2 * half, half, lo + half, hi - half, face, 0.45 * maxb, you.get("max_speed", 900)),
+        % (px, 2 * half, half, lo + half, hi - half, face, maxb, you.get("max_speed", 900)),
         "The opponent is the LEFT paddle; its center is currently at y=%.0f." % opp.get("paddle_center", 0),
         "The ball's current speed is %.0f px/s, and every hit multiplies the speed by %.3f, up to a maximum "
         "of %.0f px/s." % (speed, speedup, float(state.get("physics", {}).get("max_ball_speed", MAX_SPEED_CAP))),

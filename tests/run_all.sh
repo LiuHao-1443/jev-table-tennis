@@ -42,7 +42,7 @@ run "决策日志"   "$JSC" tests/jev_log_test.js
 run "球速爬坡"   "$JSC" tests/jev_speed_test.js
 run "闭环多判"   "$JSC" tests/jev_multiround.js
 run "待命位"     "$JSC" tests/jev_ready_test.js
-run "拍高"       "$JSC" tests/jev_paddle_test.js
+run "物理旋钮"   "$JSC" tests/jev_paddle_test.js
 run "超时≠掉线"  "$JSC" tests/jev_timeout_test.js
 run "归因审计"   "$JSC" tests/jev_attribution.js
 run "纯模式"     python3 tests/jev_pure_test.py
