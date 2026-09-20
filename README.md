@@ -218,6 +218,10 @@ that were **rejected** and the exact command behind every number.
 - **7 bands is right; 40 bands collapses to 0/10.**
 - **The closed loop really corrects**: with a stub that gets more accurate as the ball approaches, the
   first-ask error of 157px drops to 26px by the last ask.
+- **One decision asks the model exactly one question** — where the paddle's centre should be
+  (`place`), or where to wait (`ready`), or which serve arc (`serve`). Everything else on a decision-log
+  line (latency, tokens, cost, score, the servo speed limit) is local bookkeeping; the log used to also
+  print two dead `aim`/`power` fields left over from the assisted baseline, which never reach the physics.
 - **Speed and thinking are in direct trade**: at a 551 cap a rally allows 3 decisions; at 332 it
   allowed 5. That trade-off is deliberate.
 - **Its placement error is intrinsic to the question it is asked.** Median 47px on 232 real

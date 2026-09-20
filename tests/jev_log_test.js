@@ -60,16 +60,23 @@ function decide(state) {
                answers: { serve: { type: 'choice', choice: 'dip', confidence: 0.6 } },
                prompt_chars: 900, question_count: 2 } };
   }
+  if (state.kind === 'ready') {
+    return { ok: true, ready: 'p3', move_to: you.paddle_center, recover_to: mid, speed: you.max_speed,
+      model: 'jev-test', usage: { input_tokens: 912, output_tokens: 30 }, cost_usd: 0.0000383,
+      trace: { state_text: 'Table tennis, top-down view. (待命位的原始描述)',
+               questions: { ready: { type: 'choice', criteria: { p3: 'paddle centre at y=338.5' } } },
+               answers: { ready: { type: 'choice', choice: 'p3', confidence: 0.4 } },
+               prompt_chars: 1180, question_count: 1 } };
+  }
   var arrival = fold(b.y + b.vy * ((you.paddle_x - b.r - b.x) / b.vx), lo, hi);
   var idx = 3;
   var bands = ['b0','b1','b2','b3','b4','b5','b6'];
   for (var i = 0; i < 7; i++) { var a = lo + (hi - lo) / 7 * i; if (arrival >= a && arrival < a + (hi - lo) / 7) idx = i; }
   var probs = {}; bands.forEach(function (k, j) { probs[k] = j === idx ? 0.37 : 0.105; });
   var center = lo + (hi - lo) / 7 * (idx + 0.5);
-  return { ok: true, move_to: center - 0.45 * you.paddle_half, speed: 588, recover_to: center,
+  return { ok: true, move_to: center, speed: 588, recover_to: center,
     note: '压你反手', model: 'jev-test',
-    band: bands[idx], band_center: center, band_confidence: 0.26, band_probabilities: probs,
-    aim: 'down', power: 0.36,
+    place: 'p' + idx, place_y: center, band_confidence: 0.26, band_probabilities: probs,
     usage: { input_tokens: 996, output_tokens: 42 }, cost_usd: 0.00004183,
     trace: { state_text: 'Table tennis, top-down view. Ball at x=' + Math.round(b.x) + ', y=' + Math.round(b.y) +
              '. It will reach you in about 0.41 seconds. (完整的原始情境描述)',
@@ -133,8 +140,15 @@ pass('点一下按钮就打开日志面板', els.ovLog.classList.contains('show'
 var html = log();
 pass('日志里能看到每条决策的耗时与 token', html.indexOf('ms') > 0 && html.indexOf('tok') > 0,
   html.slice(0, 120).replace(/\s+/g, ' '));
-pass('日志里能看到模型判断的落点区间与置信度', /b[0-6] \d+%/.test(html));
-pass('日志里能看到解码后的机械臂指令', html.indexOf('x→y=') > 0 && html.indexOf('发力') > 0);
+pass('日志里显示它选的拍位（纯驱动：标签就是那个像素位置）',
+  /p[0-6] → y=\d+ \d+%/.test(html), (html.match(/p[0-6] → y=\d+ \d+%/) || [''])[0]);
+pass('日志里显示解码后的机械臂指令', html.indexOf('拍位') > 0 && html.indexOf('速度') > 0);
+pass('待命那一问单独渲染（不再掉进兜底分支）',
+  html.indexOf('待命 p3') > 0 && html.indexOf('等位 y=') > 0,
+  '待命 ' + (html.indexOf('待命 p3') > 0 ? '已单独渲染' : '没渲染出来'));
+pass('方向/发力 这两个不参与物理的死字段不再冒充它的回答',
+  html.indexOf('方向') < 0 && html.indexOf('发力') < 0,
+  '出现次数：方向 ' + (html.split('方向').length - 1) + ' · 发力 ' + (html.split('发力').length - 1));
 pass('日志里能看到这条的原始输入规模', html.indexOf('输入') > 0 && html.indexOf('问') > 0);
 pass('面板顶部有汇总统计', /平均 \d+ms/.test(String(document.getElementById('logStat').textContent)),
   String(document.getElementById('logStat').textContent));

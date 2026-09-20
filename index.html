@@ -391,14 +391,20 @@ function renderLog() {
         (r.round > 0 ? '<span class="lat">本板第 ' + (r.round + 1) + ' 判</span>' : '') +
         (r.kind === 'serve'
           ? '<span class="band">发球</span><span class="cmd">弧度 ' + (r.serveVy || 0).toFixed(2) + '</span>'
-          : r.place
-            ? /* 纯驱动：它选的就是拍子该去的那个位置，本地没有换算 */
-              '<span class="band">' + r.place + ' → y=' + Math.round(r.placeY) + ' ' +
-              Math.round((r.conf || 0) * 100) + '%</span>' +
-              '<span class="cmd">拍位 ' + Math.round(r.placeY) + ' 速度 ' + Math.round(r.speed) + '</span>'
-            : '<span class="band">' + (r.band || '?') + ' ' + Math.round((r.conf || 0) * 100) + '%</span>' +
-              '<span class="cmd">x→y=' + Math.round(r.moveTo) + ' 速度 ' + Math.round(r.speed) +
-              ' 方向 ' + (r.aim || '?') + ' 发力 ' + Math.round((r.power || 0) * 100) + '%</span>') +
+          : r.kind === 'ready'
+            /* 待命那一问：它答的是「站哪等」。这一问没有 place，得单独渲染，
+               否则会掉进下面的兜底分支，把方向/发力这些死字段当成它的回答显示出来。 */
+            ? '<span class="band">待命 ' + (r.ready || '?') + '</span>' +
+              '<span class="cmd">等位 y=' + Math.round(r.recoverTo) + ' 速度 ' + Math.round(r.speed) + '</span>'
+            : r.place
+              ? /* 纯驱动：它选的就是拍子该去的那个位置，本地没有换算 */
+                '<span class="band">' + r.place + ' → y=' + Math.round(r.placeY) + ' ' +
+                Math.round((r.conf || 0) * 100) + '%</span>' +
+                '<span class="cmd">拍位 ' + Math.round(r.placeY) + ' 速度 ' + Math.round(r.speed) + '</span>'
+              : /* 兜底：仅 assisted 基线走这里（它会返回 band/aim/power）。
+                   方向/发力 记录在案但不参与物理，所以不在这里显示，免得看着像它能控制。 */
+                '<span class="band">' + (r.band || '?') + ' ' + Math.round((r.conf || 0) * 100) + '%</span>' +
+                '<span class="cmd">x→y=' + Math.round(r.moveTo) + ' 速度 ' + Math.round(r.speed) + '</span>') +
         (r.truth === null || r.truth === undefined ? ''
           : '<span class="lat">实际 y=' + Math.round(r.truth) + (r.correct ? ' ✅' : ' ❌ 差 ' + Math.round(Math.abs(r.truth - r.predicted)) + 'px') + '</span>')
       : '<span class="id">#' + r.id + '</span><span class="ms">失败</span><span class="lat">' + (r.error || '') + '</span>';
@@ -445,6 +451,7 @@ function mkRec(d, kind, ok, err) {
     band: d.band || '', conf: d.band_confidence || 0, probs: d.band_probabilities || null,
     bandCenter: (typeof d.band_center === 'number') ? d.band_center : null,
     place: d.place || '', placeY: (typeof d.place_y === 'number') ? d.place_y : null,
+    ready: d.ready || '',
     aim: d.aim || '', power: d.power || 0,
     // 解码后的机械臂指令
     moveTo: d.move_to, speed: d.speed, recoverTo: d.recover_to, serveVy: d.serve_vy, note: d.note || '',
@@ -944,6 +951,9 @@ function applyDecision(d, key) {
   if (typeof d.place_y === 'number') brain.bandCenter = d.place_y;
   if (typeof d.band_confidence === 'number') brain.bandConf = d.band_confidence;
   brain.probs = d.band_probabilities || null;
+  /* ⚠️ 遗留字段：assisted 基线会返回 aim/power，但回球角度完全由「击球点离拍心多远」
+     机械决定（见 tryHit 里的 rel），所以这两个答案对物理零影响。
+     纯驱动模式下中继根本不问它们。这里仍然记下来，只为对照，不代表它能控制。 */
   if (d.aim) brain.aim = String(d.aim);
   if (d.usage && typeof d.usage.input_tokens === 'number') brain.tokens += d.usage.input_tokens;
   if (typeof d.cost_usd === 'number') brain.costUsd += d.cost_usd;
