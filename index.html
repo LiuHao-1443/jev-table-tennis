@@ -1,0 +1,1404 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>人类 vs JEV · 乒乓球</title>
+<style>
+  :root{
+    --human:#ff4d6d;
+    --human-soft:#ff8fa3;
+    --jev:#22d3ee;
+    --jev-soft:#7dd3fc;
+    --ink:#e8eefc;
+    --dim:#8ea0c4;
+    --line:rgba(140,170,255,.16);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 760px at 50% -12%, #17253f 0%, #080d18 56%, #04060c 100%);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    min-height:100vh; padding:16px; overflow:hidden;
+    -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent;
+  }
+  .stage{width:min(1000px,100%); position:relative}
+  canvas{
+    width:100%; height:auto; display:block; border-radius:20px; touch-action:none;
+    box-shadow:0 34px 90px -34px rgba(0,0,0,.95), 0 0 0 1px rgba(120,160,255,.13);
+  }
+  .overlay{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    padding:22px; border-radius:20px; background:rgba(4,7,14,.74);
+    backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+  }
+  .overlay.show{display:flex}
+  .card{width:min(600px,100%); text-align:center; animation:pop .28s cubic-bezier(.2,.9,.3,1.2)}
+  @keyframes pop{from{opacity:0; transform:translateY(10px) scale(.97)} to{opacity:1; transform:none}}
+  .card h1{margin:0 0 6px; font-size:clamp(22px,3.4vw,34px); letter-spacing:.5px}
+  .card h1 .vs{color:var(--dim); font-weight:400; font-size:.7em; margin:0 8px}
+  .card .you{color:var(--human)} .card .ai{color:var(--jev)}
+  .card p.sub{margin:0 0 18px; color:var(--dim); font-size:14px; line-height:1.75}
+  .levels{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin:0 0 18px}
+  .lv{
+    background:rgba(255,255,255,.05); color:var(--ink); border:1px solid var(--line);
+    padding:9px 16px; border-radius:11px; font-size:14px; cursor:pointer; transition:.16s;
+    font-family:inherit;
+  }
+  .lv:hover{background:rgba(255,255,255,.1); transform:translateY(-1px)}
+  .lv.on{background:linear-gradient(180deg,rgba(34,211,238,.28),rgba(34,211,238,.12)); border-color:rgba(34,211,238,.6); color:#d8fbff}
+  .btn{
+    border:0; cursor:pointer; font-family:inherit; font-weight:700; letter-spacing:.5px;
+    padding:14px 40px; border-radius:13px; font-size:16px; color:#04121a;
+    background:linear-gradient(180deg,#7ef0ff,#22d3ee);
+    box-shadow:0 14px 34px -12px rgba(34,211,238,.9); transition:.16s;
+  }
+  .btn:hover{transform:translateY(-2px); box-shadow:0 18px 40px -12px rgba(34,211,238,1)}
+  .btn.ghost{background:rgba(255,255,255,.06); color:var(--ink); box-shadow:none; border:1px solid var(--line); font-weight:600}
+  .row{display:flex; gap:10px; justify-content:center; flex-wrap:wrap}
+  .keys{margin-top:18px; color:var(--dim); font-size:12.5px; line-height:1.9}
+  kbd{
+    background:rgba(255,255,255,.08); border:1px solid var(--line); border-bottom-width:2px;
+    border-radius:6px; padding:1px 7px; font-family:ui-monospace,Menlo,monospace; font-size:11.5px; color:#cfe0ff;
+  }
+  .score-big{font-size:clamp(30px,5vw,46px); font-weight:800; margin:6px 0 10px; letter-spacing:2px}
+  .score-big .h{color:var(--human)} .score-big .j{color:var(--jev)}
+  .tag{display:inline-block; font-size:12px; color:var(--dim); border:1px solid var(--line); padding:3px 10px; border-radius:99px; margin-bottom:14px}
+  /* ---- JEV 决策日志：一键查看模型每一次是怎么算的 ---- */
+  .logbtn{
+    position:absolute; right:12px; bottom:12px; z-index:5;
+    background:rgba(8,14,26,.82); color:var(--jev-soft); border:1px solid rgba(34,211,238,.35);
+    border-radius:11px; padding:8px 14px; font-size:12.5px; font-weight:600; cursor:pointer;
+    font-family:inherit; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); transition:.16s;
+  }
+  .logbtn:hover{background:rgba(34,211,238,.16); color:#d8fbff}
+  .logbtn b{color:#fff}
+  .overlay.wide{align-items:stretch; padding:16px}
+  .logcard{
+    width:min(940px,100%); display:flex; flex-direction:column; text-align:left;
+    animation:pop .24s cubic-bezier(.2,.9,.3,1.2);
+  }
+  .loghead{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px}
+  .loghead h2{margin:0; font-size:17px; letter-spacing:.5px}
+  .logstat{color:var(--dim); font-size:12.5px; font-family:ui-monospace,Menlo,monospace}
+  .loglist{
+    flex:1; overflow-y:auto; min-height:0; max-height:64vh; padding-right:4px;
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+  }
+  .entry{border-bottom:1px solid rgba(140,170,255,.1); padding:9px 10px; cursor:pointer; transition:.14s}
+  .entry:hover{background:rgba(255,255,255,.045)}
+  .entry .l1{display:flex; gap:9px; align-items:baseline; flex-wrap:wrap; font-family:ui-monospace,Menlo,monospace; font-size:12.5px}
+  .entry .id{color:var(--dim); min-width:34px}
+  .entry .ms{color:#ffd166; font-weight:700}
+  .entry .tok{color:var(--dim)}
+  .entry .band{color:var(--jev); font-weight:700}
+  .entry .cmd{color:#cfe0ff}
+  .entry .lat{color:#ff8fa3}
+  .entry .l2{color:var(--dim); font-size:11.5px; margin-top:3px; font-family:ui-monospace,Menlo,monospace}
+  .entry .detail{display:none; margin-top:9px; background:rgba(0,0,0,.34); border:1px solid var(--line);
+    border-radius:9px; padding:10px; font-family:ui-monospace,Menlo,monospace; font-size:11.5px;
+    line-height:1.65; color:#c3d4f0; white-space:pre-wrap; word-break:break-word; max-height:230px; overflow:auto}
+  .entry.open .detail{display:block}
+  .entry.bad{background:rgba(255,77,109,.09)}
+  .hint{color:var(--dim); font-size:12px; margin-top:9px}
+  .brain{
+    display:flex; align-items:center; gap:8px; justify-content:center; flex-wrap:wrap;
+    margin:0 0 16px; padding:10px 12px; border:1px solid var(--line); border-radius:12px;
+    background:rgba(255,255,255,.035);
+  }
+  .brain input{
+    flex:1 1 250px; min-width:170px; background:rgba(0,0,0,.35); border:1px solid var(--line);
+    color:var(--ink); border-radius:9px; padding:9px 11px; font-size:12.5px;
+    font-family:ui-monospace,Menlo,monospace; outline:none;
+  }
+  .brain input:focus{border-color:rgba(34,211,238,.65)}
+  .brain .st{flex:1 1 100%; text-align:left; font-size:12px; line-height:1.6; color:var(--dim)}
+  .brain .st.ok{color:#56dcb4}
+  .brain .st.bad{color:#ff8098}
+  .brain .st.wait{color:#ffd166}
+  .mini{
+    background:rgba(255,255,255,.06); border:1px solid var(--line); color:var(--ink);
+    border-radius:9px; padding:9px 14px; font-size:12.5px; cursor:pointer; font-family:inherit;
+  }
+  .mini:hover{background:rgba(255,255,255,.13)}
+</style>
+</head>
+<body>
+<div class="stage">
+  <canvas id="game"></canvas>
+
+  <div class="overlay show" id="ovMenu">
+    <div class="card">
+      <div class="tag">单人 · 键盘 / 鼠标 / 触屏</div>
+      <h1><span class="you">人类</span><span class="vs">VS</span><span class="ai">JEV</span></h1>
+      <p class="sub">你在<b>左边</b>，JEV 在<b>右边</b>。每局 11 分、先赢 3 局者胜，10:10 后交替发球。<br/>JEV 的走位、落点、发球弧度全部由<b>大模型</b>实时决策——本地没有备用 AI。</p>
+      <div class="levels" id="lvMenu"></div>
+
+      <div class="brain">
+        <input id="brainUrl" spellcheck="false" placeholder="JEV 大脑中继地址，例如 http://127.0.0.1:8760" />
+        <button class="mini" id="btnConn">连接大脑</button>
+        <div class="st wait" id="brainSt">检查中…</div>
+      </div>
+
+      <button class="btn" id="btnStart">开始比赛</button>
+      <div class="keys">
+        <kbd>鼠标移动</kbd> 或 <kbd>W</kbd>/<kbd>S</kbd>、<kbd>↑</kbd>/<kbd>↓</kbd> 控制球拍 ·
+        <kbd>空格</kbd> 暂停 · <kbd>R</kbd> 重开 · <kbd>1</kbd>~<kbd>4</kbd> 换档位 · <kbd>M</kbd> 静音 · <kbd>P</kbd> 显示模型指令
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovPause">
+    <div class="card">
+      <h1>已暂停</h1>
+      <p class="sub" id="pauseSub"></p>
+      <div class="row">
+        <button class="btn" id="btnResume">继续</button>
+        <button class="btn ghost" id="btnRestart">重新开始</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovOver">
+    <div class="card">
+      <h1 id="overTitle"></h1>
+      <div class="score-big" id="overScore"></div>
+      <p class="sub" id="overSub"></p>
+      <div class="row">
+        <button class="btn" id="btnAgain">再来一场</button>
+        <button class="btn ghost" id="btnMenu">换难度</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay wide" id="ovLog">
+    <div class="logcard">
+      <div class="loghead">
+        <h2>JEV 决策日志</h2>
+        <button class="mini" id="btnLogClose">关闭 (L)</button>
+        <button class="mini" id="btnLogClear">清空显示</button>
+        <span class="logstat" id="logStat"></span>
+      </div>
+      <div class="loglist" id="logList"></div>
+      <div class="hint">点任意一条展开它的完整计算过程：发给模型的原始情境描述、问题集、每个问题的概率分布、以及解码后的机械臂指令。</div>
+    </div>
+  </div>
+
+  <button class="logbtn" id="btnLog">▤ JEV 决策日志 <b id="logCount">0</b></button>
+</div>
+
+<script>
+(function () {
+'use strict';
+
+/* ============================== 常量 ============================== */
+const W = 1000, H = 625;
+const TABLE = { x: 18, y: 96, w: W - 36, h: H - 140 };
+const WALL_T = TABLE.y, WALL_B = TABLE.y + TABLE.h;
+const NET_X = W / 2;
+const PW = 16, PH = 112, PMARGIN = 66;
+const HUMAN_X = TABLE.x + PMARGIN;
+const JEV_X = TABLE.x + TABLE.w - PMARGIN - PW;
+const R = 10;
+const BASE_SPEED = 430, MAX_SPEED = 1180, SPEEDUP = 1.10, MAX_BOUNCE = 0.92;
+/* 一板球（一次发球到得分之间）的球速是「逐渐加速」的：
+   起始 = 上限的 70%，每被球拍击一次 ×SPEEDUP（撞墙不加速），到上限就不再涨。
+   62% + ×1.10 ⇒ 约 5 板追上上限，正好在一场普通回合（3~5 板）里就能感觉到越打越快。
+   所以短回合是慢的、长回合越来越快，但永远不会超过上限——上限就是「它还来得及算」的那条线。 */
+const RALLY_START_FRAC = 0.70;
+const WIN_SCORE = 11, WIN_GAMES = 3;
+const HUMAN_MOUSE_SPEED = 2600, HUMAN_KEY_SPEED = 820;
+const MID_Y = (WALL_T + WALL_B) / 2;
+
+/* 档位只约束 JEV 的机械性能与人格提示词；走位、落点、发球全部由大模型决定 */
+const LEVELS = {
+  easy:   { key:'easy',   name:'轻松',     speedLimit:520,  persona:'你在放水：故意慢半拍，经常够不到球，回球软绵绵。', note:'机械臂限速 520 px/s' },
+  normal: { key:'normal', name:'普通',     speedLimit:900,  persona:'你认真打，稳中带凶，尽量把球回到让对手别扭的位置。', note:'机械臂限速 900 px/s' },
+  hard:   { key:'hard',   name:'困难',     speedLimit:1500, persona:'你很强：算准每一板落点，专打对手球拍的反方向。', note:'机械臂限速 1500 px/s' },
+  insane: { key:'insane', name:'JEV 宗师', speedLimit:2600, persona:'你是世界冠军级机械臂，算计每一寸台面，几乎不失误。', note:'机械臂限速 2600 px/s' }
+};
+const MIN_VY_RATIO = 0.13;   // 反“永久平球”：回球至少带 7.5° 纵向分量
+const HEAT_START = 18;       // 长回合从第几拍开始“过热”
+const HEAT_SPAN = 60;        // 过热的衰减跨度（拍）
+const HEAT_MIN = 0.18;       // 过热后机械臂最低保留的移速比例
+const ORDER = ['easy','normal','hard','insane'];
+const BRAIN_DEADLINE_MS = 9000;   // 单次大脑调用超时（实测 Jev 中位 1.9s，最慢见过 3.6s）
+const BRAIN_RETRY_MS = 1200;      // 掉线后的重试间隔
+/* 一板球问多次（闭环修正）：延迟修好后每次决策只要 ~0.4s，而一板球飞 ~2.9s，
+   所以可以问好几次，让它在球飞近的过程中不断修正落点判断。
+   这里只管「什么时候可以再问一次」，不参与任何判断——判断仍然是它做的。 */
+const REASK_MIN_GAP_MS = 120;     // 两次决策的最小间隔，防止把请求堆起来
+const REASK_LEAD_S = 0.12;        // 剩余飞行时间少于「预计延迟 + 这个余量」就别问了，问了也来不及
+/* 时间基准：球飞到 JEV 的时间必须长于模型的一次决策耗时，否则再聪明的模型也永远迟到。
+   所以球速不是常数，而是跟着实测延迟走：延迟 1.9s 就把球速上限压到 ~385 px/s。
+   这是环境约束（把球放慢，给大脑留出思考时间），不是替它做决定。 */
+const TEMPO_MARGIN_S = 0.9;         // 决策兑现余量（实测延迟方差大，留宽一点）
+const TEMPO_MIN_FLIGHT_S = 1.2;     // 再快也不快过这个
+const TEMPO_DEFAULT_LATENCY_S = 2.0;
+
+/* ============================== 画布 ============================== */
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+let dpr = 1;
+function fit() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cvs.width = Math.round(W * dpr);
+  cvs.height = Math.round(H * dpr);
+  cvs.style.aspectRatio = W + ' / ' + H;
+}
+fit();
+window.addEventListener('resize', fit);
+
+/* ============================== 音效 ============================== */
+let actx = null, muted = false;
+function audioInit() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+  if (actx && actx.state === 'suspended') actx.resume();
+}
+function sfx(freq, dur, type, vol, slideTo) {
+  if (muted) return;
+  audioInit(); if (!actx) return;
+  const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+  o.type = type || 'sine';
+  o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(40, slideTo), t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol || 0.07, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(actx.destination);
+  o.start(t); o.stop(t + dur + 0.03);
+}
+
+/* ============================== 工具 ============================== */
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+function rr(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+/* 说明：这里没有任何 JEV 的本地策略。拦截点、走位、瞄准全部由大模型给出，
+   本地只保留一个把「模型指定的拍面中心 y」执行成位移的伺服（见 updateJev）。*/
+
+/* ============================== 状态 ============================== */
+const ball = { x: NET_X, y: MID_Y, vx: 0, vy: 0, speed: BASE_SPEED, trail: [] };
+const human = { x: HUMAN_X, y: MID_Y - PH / 2, vy: 0, py: MID_Y - PH / 2, flash: 0 };
+const jev = { x: JEV_X, y: MID_Y - PH / 2, vy: 0, py: MID_Y - PH / 2, flash: 0 };
+
+/* ---- JEV 的大脑：这里只存放「大模型说了什么」，不含任何本地策略 ---- */
+const brain = {
+  target: MID_Y,      // 模型指定：球到达时拍面中心要停在哪个 y
+  recoverTo: MID_Y,   // 模型指定：回球后回到哪个 y 待命
+  speed: 900,         // 模型指定：移动速度 px/s（受档位限速封顶）
+  serveVy: 0,         // 模型指定：发球弧度系数
+  seq: 0,             // 回合序号：球每朝 JEV 飞一次 +1，一次飞行只问一次
+  askedKey: '',
+  inflight: false,
+  online: null,       // null 未知 / true 在线 / false 掉线
+  model: '',
+  mode: 'assisted',   // pure=纯驱动（零本地算法）/ assisted=带本地辅助
+  pureCap: 0,         // pure 模式固定的球速上限（由中继下发）
+  latency: 0,
+  lastError: '',
+  nextRetryAt: 0,
+  showCmd: true,      // P 键：显示模型指令线与延迟
+  late: 0,            // 超过截止时间被作废的决策次数（不是掉线）
+  ctl: null,          // 在飞请求的 AbortController
+  inflightKind: '',   // 在飞请求是哪一类（ready 是低优先级，可被抢占）
+  superseded: false,  // 这次取消是我们主动让位，不是它慢
+  ready: '',          // 它自己选的待命位标签
+  multi: true,        // K 键：一板球问多次（闭环修正）还是只问一次
+  round: 0,           // 这板球已经问到第几次（0 = 第一次）
+  lastAskAt: 0,       // 上次发起决策的时刻（用于限制提问频率）
+  /* ---- 模型的「思考过程」，全部来自返回值，本地只做统计展示 ---- */
+  latencyS: 0,        // 延迟滑动平均（秒），决定球速上限
+  band: '',           // 模型判断的落点区间
+  bandCenter: null,   // 该区间中心（用于赛后统计它的判断准不准）
+  bandConf: 0,
+  probs: null,        // 模型给出的完整概率分布
+  aim: '',
+  tokens: 0,          // 累计输入 token
+  costUsd: 0,         // 累计花费
+  judgeHit: 0, judgeMiss: 0,   // 落点判断准/不准（纯统计，不参与决策）
+  /* ---- 决策日志：每次问模型都留一条，含完整输入/输出/耗时/用量 ---- */
+  log: [],            // 最新在前，最多 LOG_MAX 条
+  logOpen: false,
+  pausedByLog: false,
+};
+const LOG_MAX = 60;
+
+/* ---- 决策日志：把每一次「Jev 是怎么算的」原样留档 ---- */
+function logPush(rec) {
+  brain.log.unshift(rec);
+  if (brain.log.length > LOG_MAX) brain.log.length = LOG_MAX;
+  updateLogBadge();
+  if (brain.logOpen) renderLog();
+}
+function updateLogBadge() {
+  const el = document.getElementById('logCount');
+  if (el) el.textContent = String(brain.log.length);
+}
+function pctList(probs) {
+  if (!probs) return '—';
+  const ks = Object.keys(probs);
+  if (!ks.length) return '—';
+  return ks.map(k => k + ' ' + (probs[k] * 100).toFixed(0) + '%').join('  ');
+}
+function renderLog() {
+  const list = document.getElementById('logList');
+  if (!list) return;
+  const n = brain.log.length;
+  const totalTok = brain.log.reduce((a, r) => a + (r.tok || 0), 0);
+  const totalCost = brain.log.reduce((a, r) => a + (r.cost || 0), 0);
+  const okLat = brain.log.filter(r => r.ms > 0);
+  const avg = okLat.length ? Math.round(okLat.reduce((a, r) => a + r.ms, 0) / okLat.length) : 0;
+  const judged = brain.judgeHit + brain.judgeMiss;
+  document.getElementById('logStat').textContent =
+    n + ' 条 · 平均 ' + avg + 'ms · 共 ' + totalTok + ' tok · $' + totalCost.toFixed(5) +
+    (judged ? ' · 落点判断 ' + brain.judgeHit + '/' + judged : '');
+
+  if (!n) { list.innerHTML = '<div class="entry"><div class="l2">还没有决策记录——开始比赛后，JEV 每问一次模型这里就会多一条。开了多判（K 键）时，同一板球会有多条。</div></div>'; return; }
+
+  list.innerHTML = brain.log.map((r, i) => {
+    const l1 = r.ok
+      ? '<span class="id">#' + r.id + '</span><span class="ms">' + r.ms + 'ms</span>' +
+        '<span class="tok">' + r.tok + ' tok · $' + (r.cost || 0).toFixed(6) + '</span>' +
+        (r.round > 0 ? '<span class="lat">本板第 ' + (r.round + 1) + ' 判</span>' : '') +
+        (r.kind === 'serve'
+          ? '<span class="band">发球</span><span class="cmd">弧度 ' + (r.serveVy || 0).toFixed(2) + '</span>'
+          : r.place
+            ? /* 纯驱动：它选的就是拍子该去的那个位置，本地没有换算 */
+              '<span class="band">' + r.place + ' → y=' + Math.round(r.placeY) + ' ' +
+              Math.round((r.conf || 0) * 100) + '%</span>' +
+              '<span class="cmd">拍位 ' + Math.round(r.placeY) + ' 速度 ' + Math.round(r.speed) + '</span>'
+            : '<span class="band">' + (r.band || '?') + ' ' + Math.round((r.conf || 0) * 100) + '%</span>' +
+              '<span class="cmd">x→y=' + Math.round(r.moveTo) + ' 速度 ' + Math.round(r.speed) +
+              ' 方向 ' + (r.aim || '?') + ' 发力 ' + Math.round((r.power || 0) * 100) + '%</span>') +
+        (r.truth === null || r.truth === undefined ? ''
+          : '<span class="lat">实际 y=' + Math.round(r.truth) + (r.correct ? ' ✅' : ' ❌ 差 ' + Math.round(Math.abs(r.truth - r.predicted)) + 'px') + '</span>')
+      : '<span class="id">#' + r.id + '</span><span class="ms">失败</span><span class="lat">' + (r.error || '') + '</span>';
+
+    const detail = r.ok ? (
+      '【发出去的状态描述】\n' + (r.stateText || '(未记录)') +
+      '\n\n【问它的问题】\n' + (r.questions ? JSON.stringify(r.questions, null, 1) : '(未记录)') +
+      '\n\n【它答的原始结果】\n' + (r.answers ? JSON.stringify(r.answers, null, 1) : '(未记录)') +
+      '\n\n【概率分布】\n' + (r.band ? 'band: ' + pctList(r.probs) + '\n' : '') +
+      '\n【解码成机械臂指令】\n' + JSON.stringify({
+        move_to: Math.round(r.moveTo), speed: Math.round(r.speed),
+        recover_to: Math.round(r.recoverTo), note: r.note,
+      }) +
+      '\n\n【成本】' + r.tok + ' 输入 token × $42/Btok = $' + (r.cost || 0).toFixed(8) +
+      '\n【耗时】' + r.ms + 'ms（模型 ' + (r.model || '?') + '）'
+    ) : ('错误：' + (r.error || '未知') + '\n耗时 ' + r.ms + 'ms');
+
+    return '<div class="entry' + (r.ok ? '' : ' bad') + (r.open ? ' open' : '') + '" data-i="' + i + '">' +
+      '<div class="l1">' + l1 + '</div>' +
+      '<div class="l2">' + (r.clock || '') + ' · 第 ' + (r.games || '') + ' 局 ' +
+      (r.score ? (r.score.opponent + ':' + r.score.you) : '') + ' · 回合 ' + (r.rally === undefined ? '-' : r.rally) +
+      ' · 输入 ' + (r.promptChars || 0) + ' 字 / ' + (r.qCount || 0) + ' 问' + '</div>' +
+      '<div class="detail">' + esc(detail) + '</div></div>';
+  }).join('');
+}
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+/* 把一次决策的完整过程打包成一条日志 */
+function mkRec(d, kind, ok, err) {
+  d = d || {};
+  const tr = d.trace || {};
+  brain.logSeq = (brain.logSeq || 0) + 1;
+  const t = new Date();
+  const pad = n => (n < 10 ? '0' : '') + n;
+  return {
+    id: brain.logSeq, ok: ok, error: err || '',
+    clock: pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds()),
+    kind: kind, ms: brain.latency, model: d.model || brain.model,
+    tok: (d.usage && d.usage.input_tokens) || 0,
+    outTok: (d.usage && d.usage.output_tokens) || 0,
+    cost: d.cost_usd || 0,
+    // 它做出的判断
+    band: d.band || '', conf: d.band_confidence || 0, probs: d.band_probabilities || null,
+    bandCenter: (typeof d.band_center === 'number') ? d.band_center : null,
+    place: d.place || '', placeY: (typeof d.place_y === 'number') ? d.place_y : null,
+    aim: d.aim || '', power: d.power || 0,
+    // 解码后的机械臂指令
+    moveTo: d.move_to, speed: d.speed, recoverTo: d.recover_to, serveVy: d.serve_vy, note: d.note || '',
+    // 它看到的原始输入
+    stateText: tr.state_text || '', questions: tr.questions || null, answers: tr.answers || null,
+    promptChars: tr.prompt_chars || 0, qCount: tr.question_count || 0,
+    // 场地上下文与事后核对
+    rally: rally, round: brain.round, multi: brain.multi,
+    score: { you: scoreJ, opponent: scoreH }, games: gamesH + gamesJ + 1,
+    predicted: (typeof d.band_center === 'number') ? d.band_center : null,
+    truth: null, correct: null,
+  };
+}
+function setLogOpen(on) {
+  brain.logOpen = !!on;
+  show(document.getElementById('ovLog'), brain.logOpen);
+  if (brain.logOpen) { brain.pausedByLog = !paused; setPaused(true); renderLog(); }
+  else if (brain.pausedByLog) { brain.pausedByLog = false; setPaused(false); }
+}
+let jevSay = { text: '', life: 0 };
+let relayURL = '';
+
+let phase = 'menu';           // menu | serve | rally | point | over
+let paused = false;
+let difficulty = 'normal';
+let scoreH = 0, scoreJ = 0, gamesH = 0, gamesJ = 0;
+let rally = 0, bestRally = 0, totalPoints = 0;
+let serveDir = -1, serveTimer = 0, pointTimer = 0, pointWho = null;
+let shake = 0, flashSide = 0, flashAlpha = 0;
+let banner = { text: '', sub: '', life: 0 };
+let parts = [];
+let time = 0;
+
+/* ============================== 输入 ============================== */
+const keys = Object.create(null);
+let pointerY = null, pointerOn = false;
+
+function localY(clientY) {
+  const r = cvs.getBoundingClientRect();
+  return (clientY - r.top) * (H / r.height);
+}
+cvs.addEventListener('mousemove', e => { pointerY = localY(e.clientY); pointerOn = true; });
+cvs.addEventListener('mouseleave', () => { pointerOn = false; });
+cvs.addEventListener('touchstart', e => { e.preventDefault(); pointerY = localY(e.touches[0].clientY); pointerOn = true; }, { passive: false });
+cvs.addEventListener('touchmove', e => { e.preventDefault(); pointerY = localY(e.touches[0].clientY); pointerOn = true; }, { passive: false });
+cvs.addEventListener('touchend', () => { pointerOn = false; });
+
+window.addEventListener('keydown', e => {
+  const k = e.key;
+  if ([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(k)) e.preventDefault();
+  keys[k] = true;
+  keys[k.toLowerCase()] = true;
+  audioInit();
+  if (k === ' ') { if (phase === 'menu') { startMatch(); } else if (phase === 'over') { startMatch(); } else { setPaused(!paused); } }
+  else if (k === 'r' || k === 'R') { startMatch(); }
+  else if (k === 'm' || k === 'M') { muted = !muted; banner = { text: muted ? '已静音' : '声音开', sub: '', life: 0.9 }; }
+  else if (k === 'p' || k === 'P') { brain.showCmd = !brain.showCmd; }
+  else if (k === 'l' || k === 'L') { setLogOpen(!brain.logOpen); }
+  else if (k === 'k' || k === 'K') { brain.multi = !brain.multi; brain.round = 0; }
+  else if ('1234'.includes(k)) { setDifficulty(ORDER[+k - 1]); }
+});
+window.addEventListener('keyup', e => { keys[e.key] = false; keys[e.key.toLowerCase()] = false; });
+
+/* ============================== 覆盖层 UI ============================== */
+const ovMenu = document.getElementById('ovMenu');
+const ovPause = document.getElementById('ovPause');
+const ovOver = document.getElementById('ovOver');
+const lvMenu = document.getElementById('lvMenu');
+
+function buildLevelButtons() {
+  lvMenu.innerHTML = '';
+  ORDER.forEach(k => {
+    const L = LEVELS[k];
+    const b = document.createElement('button');
+    b.className = 'lv' + (k === difficulty ? ' on' : '');
+    b.textContent = L.name;
+    b.title = L.note;
+    b.onclick = (e) => { setDifficulty(k); buildLevelButtons(); if (e && e.target && e.target.blur) e.target.blur(); };
+    lvMenu.appendChild(b);
+  });
+}
+function setDifficulty(k) {
+  if (!LEVELS[k]) return;
+  difficulty = k;
+  banner = { text: '难度：' + LEVELS[k].name, sub: LEVELS[k].note, life: 1.3 };
+  buildLevelButtons();
+}
+function show(el, on) { el.classList.toggle('show', on); }
+
+/* ---- 大脑连接状态（DOM） ---- */
+const DEFAULT_RELAY = location.protocol === 'file:' ? 'http://127.0.0.1:8760' : location.origin;
+function resolveRelay(manual) {
+  let saved = '';
+  try { saved = localStorage.getItem('jev.relay') || ''; } catch (e) { saved = ''; }
+  const use = (manual === undefined || manual === null ? saved : manual) || DEFAULT_RELAY;
+  relayURL = String(use).replace(/\/+$/, '');
+  const inp = document.getElementById('brainUrl');
+  if (inp) inp.value = relayURL;
+  try { localStorage.setItem('jev.relay', relayURL); } catch (e) { /* 隐私模式忽略 */ }
+}
+function updateBrainUI() {
+  const el = document.getElementById('brainSt');
+  if (!el) return;
+  if (brain.online === true) {
+    el.className = 'st ok';
+    el.textContent = '● 已连接 ' + relayURL + ' · 模型 ' + (brain.model || '(未命名)') +
+      (brain.latency ? ' · 上次 ' + brain.latency + 'ms' : '') + '：JEV 的每一步走位与落点都由它决定';
+  } else if (brain.online === false) {
+    el.className = 'st bad';
+    el.textContent = '⚠ 未连接：' + (brain.lastError || '未知错误') +
+      '。现在开打 JEV 会站着不动——本地没有备用 AI，请先启动 server.py';
+  } else {
+    el.className = 'st wait';
+    el.textContent = '◦ 正在连接 ' + relayURL + ' …';
+  }
+}
+function setPaused(p) {
+  if (phase === 'menu' || phase === 'over') return;
+  paused = p;
+  document.getElementById('pauseSub').textContent =
+    '当前 ' + scoreH + ' : ' + scoreJ + ' · 难度 ' + LEVELS[difficulty].name;
+  show(ovPause, p);
+}
+function syncOverlays() {
+  show(ovMenu, phase === 'menu');
+  show(ovOver, phase === 'over');
+  show(ovPause, paused && phase !== 'menu' && phase !== 'over');
+}
+buildLevelButtons();
+function onClick(id, fn) {
+  const el = document.getElementById(id);
+  el.onclick = (e) => { fn(); if (e && e.target && e.target.blur) e.target.blur(); };
+}
+onClick('btnStart', () => { audioInit(); startMatch(); });
+onClick('btnResume', () => setPaused(false));
+onClick('btnRestart', () => startMatch());
+onClick('btnAgain', () => startMatch());
+onClick('btnMenu', () => { phase = 'menu'; paused = false; syncOverlays(); buildLevelButtons(); });
+onClick('btnConn', () => { resolveRelay(document.getElementById('brainUrl').value.trim()); checkBrain(); });
+onClick('btnLog', () => setLogOpen(true));
+onClick('btnLogClose', () => setLogOpen(false));
+onClick('btnLogClear', () => { brain.log.length = 0; updateLogBadge(); renderLog(); });
+/* 点条目展开/收起它的完整计算过程（事件委托，条目是 innerHTML 生成的） */
+document.getElementById('logList').onclick = (e) => {
+  let el = e && e.target;
+  while (el && el !== e.currentTarget && !(el.dataset && el.dataset.i !== undefined)) el = el.parentNode;
+  if (!el || !el.dataset || el.dataset.i === undefined) return;
+  const rec = brain.log[Number(el.dataset.i)];
+  if (!rec) return;
+  const open = !el.classList.contains('open');
+  el.classList.toggle('open', open);
+  rec.open = open;
+};
+
+/* ============================== 比赛流程 ============================== */
+function startMatch() {
+  scoreH = scoreJ = 0; gamesH = gamesJ = 0; totalPoints = 0;
+  bestRally = 0; rally = 0;
+  brain.judgeHit = 0; brain.judgeMiss = 0; brain.tokens = 0; brain.costUsd = 0; brain.bandCenter = null;
+  human.y = human.py = MID_Y - PH / 2;
+  jev.y = jev.py = MID_Y - PH / 2;
+  parts = []; shake = 0; flashAlpha = 0;
+  paused = false;
+  phase = 'point';
+  pointTimer = 1.0;
+  pointWho = null;
+  banner = { text: '比赛开始', sub: '难度 ' + LEVELS[difficulty].name + ' · 先赢 ' + WIN_GAMES + ' 局', life: 1.6 };
+  sfx(660, 0.12, 'triangle', 0.06, 990);
+  syncOverlays();
+}
+function serverFor(total) {
+  if (scoreH >= 10 && scoreJ >= 10) return total % 2 === 0 ? 'human' : 'jev';
+  return Math.floor(total / 2) % 2 === 0 ? 'human' : 'jev';
+}
+function startServe(server) {
+  phase = 'serve';
+  serveTimer = 0.85;
+  serveDir = server === 'human' ? 1 : -1;   // 球飞向的方向
+  ball.speed = ballSpeedCap() * RALLY_START_FRAC;   // 按本局上限的比例起步，留给回合去加速
+  ball.vx = ball.vy = 0;
+  ball.trail.length = 0;
+  rally = 0;
+  brain.askedKey = '';
+  brain.nextRetryAt = 0;
+  if (server === 'jev') newApproach();      // 轮到 JEV 发球，问模型怎么发
+}
+function launch() {
+  phase = 'rally';
+  // 人类发球：随机小角度；JEV 发球：用大模型给的弧度系数
+  const ang = serveDir > 0 ? (Math.random() * 2 - 1) * 0.22 : clamp(brain.serveVy, -1, 1) * 0.5;
+  ball.vx = Math.cos(ang) * ball.speed * serveDir;
+  ball.vy = Math.sin(ang) * ball.speed;
+  ball.x = serveDir > 0 ? HUMAN_X + PW + R + 2 : JEV_X - R - 2;
+  ball.y = serveDir > 0 ? human.y + PH / 2 : jev.y + PH / 2;
+  if (serveDir > 0) newApproach();   // 球飞向 JEV，触发一次大脑决策
+  sfx(520, 0.07, 'square', 0.05, 760);
+}
+function scorePoint(who) {
+  if (phase !== 'rally') return;
+  if (who === 'human') { scoreH++; flashSide = 1; } else { scoreJ++; flashSide = -1; }
+  totalPoints++;
+  phase = 'point'; pointTimer = 0.9; pointWho = who;
+  shake = 1; flashAlpha = 0.55;
+  sfx(who === 'human' ? 720 : 200, 0.22, 'sawtooth', 0.07, who === 'human' ? 340 : 120);
+  for (let i = 0; i < 34; i++) burst(who === 'human' ? TABLE.x + TABLE.w : TABLE.x, ball.y, who === 'human' ? '#22d3ee' : '#ff4d6d');
+}
+function afterPoint() {
+  const w = gameWinner();
+  if (w) {
+    if (w === 'human') gamesH++; else gamesJ++;
+    const done = gamesH >= WIN_GAMES || gamesJ >= WIN_GAMES;
+    if (done) { finishMatch(); return; }
+    banner = { text: (w === 'human' ? '人类' : 'JEV') + ' 拿下第 ' + (gamesH + gamesJ) + ' 局', sub: scoreH + ' : ' + scoreJ + ' · 大比分 ' + gamesH + ' - ' + gamesJ, life: 2.0 };
+    scoreH = scoreJ = 0; totalPoints = 0;
+    phase = 'point'; pointTimer = 1.5;
+    sfx(w === 'human' ? 880 : 300, 0.35, 'triangle', 0.08, w === 'human' ? 1320 : 160);
+    return;
+  }
+  startServe(serverFor(totalPoints));
+}
+function gameWinner() {
+  if (scoreH >= WIN_SCORE && scoreH - scoreJ >= 2) return 'human';
+  if (scoreJ >= WIN_SCORE && scoreJ - scoreH >= 2) return 'jev';
+  return null;
+}
+function finishMatch() {
+  phase = 'over';
+  const win = gamesH > gamesJ;
+  document.getElementById('overTitle').innerHTML = win
+    ? '<span class="ai">JEV</span> 被击败'
+    : '<span class="you">人类</span> 惜败';
+  document.getElementById('overScore').innerHTML =
+    '<span class="h">' + gamesH + '</span> : <span class="j">' + gamesJ + '</span>';
+  document.getElementById('overSub').textContent =
+    '难度 ' + LEVELS[difficulty].name + ' · 最长回合 ' + bestRally + ' 拍 · 本场比赛结束';
+  show(ovOver, true);
+  sfx(win ? 880 : 220, 0.5, 'triangle', 0.09, win ? 1400 : 110);
+}
+
+/* ============================== 粒子 ============================== */
+function burst(x, y, color, spread) {
+  spread = spread || 1;
+  parts.push({
+    x, y,
+    vx: (Math.random() * 2 - 1) * 320 * spread,
+    vy: (Math.random() * 2 - 1) * 320 * spread,
+    life: 0.5 + Math.random() * 0.45,
+    max: 1,
+    size: 1.5 + Math.random() * 3,
+    color
+  });
+}
+function updateParts(dt) {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= 0.94; p.vy *= 0.94;
+    p.life -= dt;
+    if (p.life <= 0) parts.splice(i, 1);
+  }
+}
+
+/* ============================== 球拍与判定 ============================== */
+function updateHuman(dt) {
+  human.py = human.y;
+  const half = PH / 2;
+  let target = null;
+  if (pointerOn && pointerY != null) target = pointerY - half;
+  let want = 0;
+  if (keys['w'] || keys['ArrowUp']) want -= HUMAN_KEY_SPEED;
+  if (keys['s'] || keys['ArrowDown']) want += HUMAN_KEY_SPEED;
+
+  if (target != null) {
+    const step = clamp(target - human.y, -HUMAN_MOUSE_SPEED * dt, HUMAN_MOUSE_SPEED * dt);
+    human.y += step;
+  } else if (want !== 0) {
+    human.y += want * dt;
+  }
+  human.y = clamp(human.y, WALL_T, WALL_B - PH);
+  human.vy = dt > 0 ? (human.y - human.py) / dt : 0;
+  human.flash = Math.max(0, human.flash - dt * 4);
+}
+
+/* ==================== JEV 的大脑客户端（大模型驱动） ====================
+   本地不含任何策略：拦截点、走位、瞄准、发球全部来自模型返回的 JSON。
+   本地只做三件事：把台面状态发出去、把命令夹到合法范围、按命令位移。 */
+
+/* 新的一板球开始：换一个决策序号，并把「这板问了几次」清零 */
+function newApproach() {
+  brain.seq++;
+  brain.round = 0;
+}
+function brainKey() {
+  if (phase === 'serve' && serveDir < 0) return 'serve#' + brain.seq;
+  // 一板球可以问多次：round 每多一次决策就 +1，于是 key 变化，下一帧自然再问一次
+  if (phase === 'rally' && ball.vx > 0) return 'rally#' + brain.seq + '.' + brain.round;
+  // 球正飞离它（或还没发球）：问它「你要在哪等下一板」。一板只问一次。
+  if (phase === 'rally' && ball.vx < 0) return 'ready#' + brain.seq;
+  if (phase === 'serve') return 'ready#' + brain.seq;
+  return null;
+}
+/* 这一次决策回来之后，还值不值得再问一次？只判断「来不来得及」，不判断打哪里。 */
+function maybeNextRound() {
+  if (!brain.multi) return;
+  if (phase !== 'rally' || ball.vx <= 0) return;      // 只有球飞向它时才多判
+  const eta = (jev.x - R - ball.x) / Math.max(1, ball.vx);
+  if (eta <= brainLatencyS() + REASK_LEAD_S) return;      // 剩余时间不够一次往返
+  if (performance.now() - brain.lastAskAt < REASK_MIN_GAP_MS) return;
+  brain.round++;
+}
+const r1 = v => Math.round(v * 10) / 10;
+
+/* 机械臂过热：长回合里物理上限递减。这是环境约束、不是本地策略——
+   去哪、怎么打仍然全由模型决定，只是机器越打越慢，保证任何对局都会收敛。 */
+function heatNow() {
+  return clamp(1 - Math.max(0, rally - HEAT_START) / HEAT_SPAN, HEAT_MIN, 1);
+}
+function speedLimitNow() {
+  return LEVELS[difficulty].speedLimit * heatNow();
+}
+/* ---- 时间基准：跟着模型的真实延迟走 ---- */
+function brainLatencyS() {
+  return brain.latencyS > 0 ? brain.latencyS : TEMPO_DEFAULT_LATENCY_S;
+}
+function flightFloorS() {
+  return Math.max(TEMPO_MIN_FLIGHT_S, brainLatencyS() + TEMPO_MARGIN_S);
+}
+function ballSpeedCap() {
+  // pure 模式（纯驱动评测）：球速用固定值，不随实测延迟变化。
+  // 否则「测试条件」会被被测对象自己的延迟改动，测出来的东西不能横向比较。
+  if (brain.mode === 'pure' && brain.pureCap > 0) return clamp(brain.pureCap, 240, MAX_SPEED);
+  return clamp(TABLE.w / flightFloorS(), 240, MAX_SPEED);
+}
+
+function buildState(kind) {
+  const L = LEVELS[difficulty];
+  const eta = ball.vx > 0 ? (jev.x - R - ball.x) / ball.vx : null;
+  return {
+    kind: kind,
+    persona: L.persona,
+    table: { y_top: WALL_T, y_bottom: WALL_B, x_left: TABLE.x, x_right: TABLE.x + TABLE.w },
+    ball: { x: r1(ball.x), y: r1(ball.y), vx: r1(ball.vx), vy: r1(ball.vy), r: R, speed: r1(ball.speed) },
+    you: {
+      side: 'right',
+      paddle_x: jev.x,
+      paddle_half: PH / 2,
+      paddle_center: r1(jev.y + PH / 2),
+      max_speed: Math.round(speedLimitNow()),
+      machine_heat: Math.round(heatNow() * 100) / 100,
+      time_to_arrival_s: (eta === null || eta < 0) ? null : Math.round(eta * 1000) / 1000,
+      last_command: { move_to: r1(brain.target), recover_to: r1(brain.recoverTo), speed: brain.speed }
+    },
+    opponent: { paddle_x: human.x, paddle_center: r1(human.y + PH / 2) },
+    score: { you: scoreJ, opponent: scoreH },
+    games: { you: gamesJ, opponent: gamesH },
+    rally: rally,
+    physics: {
+      max_bounce_angle_rad: MAX_BOUNCE,
+      speedup_per_hit: SPEEDUP,
+      max_ball_speed: ballSpeedCap(),   // 这一局真正生效的球速上限（纯驱动下是固定常数）
+      hard_max_ball_speed: MAX_SPEED,   // 物理天花板
+      min_vy_ratio: MIN_VY_RATIO
+    }
+  };
+}
+
+function askBrain() {
+  if (brain.inflight) {
+    /* 待命位是低优先级问题。球一旦转向它，这个请求就没意义了——
+       立刻取消，把这一轮的时间预算让给拦截决策。 */
+    const k2 = brainKey();
+    if (brain.inflightKind === 'ready' && k2 && k2.indexOf('rally') === 0 && brain.ctl) {
+      brain.superseded = true;
+      try { brain.ctl.abort(); } catch (e) { /* 忽略 */ }
+    }
+    return;
+  }
+  const key = brainKey();
+  if (!key || key === brain.askedKey) return;
+  const now = performance.now();
+  if (now < brain.nextRetryAt) return;
+  brain.askedKey = key;
+  brain.inflight = true;
+  brain.inflightKind = key.indexOf('ready') === 0 ? 'ready'
+    : (key.indexOf('serve') === 0 ? 'serve' : 'incoming');
+  brain.lastAskAt = now;
+  const myKey = key;
+  const t0 = performance.now();
+  const ctl = new AbortController();
+  brain.ctl = ctl;
+  const timer = setTimeout(() => ctl.abort(), BRAIN_DEADLINE_MS);
+
+  fetch(relayURL + '/jev/decide', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildState(key.indexOf('ready') === 0 ? 'ready'
+      : (key.indexOf('serve') === 0 ? 'serve' : 'incoming'))),
+    signal: ctl.signal
+  })
+    .then(r => r.json())
+    .then(d => {
+      clearTimeout(timer);
+      const secs = (performance.now() - t0) / 1000;
+      brain.latency = Math.round(performance.now() - t0);
+      if (d && d.ok !== false) {   // 只把成功的决策计入时间基准
+        const s = clamp(secs, 0.05, 20);
+        brain.latencyS = brain.latencyS > 0 ? (brain.latencyS * 0.65 + s * 0.35) : s;
+      }
+      applyDecision(d, myKey);
+    })
+    .catch(err => {
+      clearTimeout(timer);
+      brain.latency = Math.round(performance.now() - t0);
+      const aborted = (err && err.name === 'AbortError');
+      /* 超时 ≠ 掉线。实测接一次决策能慢到 9.9s（对方自己的抖动），
+         如果把它当成掉线，拍子会当场冻住；正确做法是保持上一个指令继续执行。 */
+      if (aborted && brain.superseded) {
+        brain.superseded = false;          // 我们主动取消的，不算它慢
+        brain.askedKey = '';
+        brain.nextRetryAt = 0;             // 立刻去问真正紧急的那个
+        brain.inflight = false;
+        return;
+      }
+      if (aborted) {
+        brain.late++;
+        brain.lastError = '这次思考超过 ' + (BRAIN_DEADLINE_MS / 1000) + 's，作废（拍子沿用上一个指令）';
+      } else {
+        brain.online = false;
+        brain.lastError = String((err && err.message) || err);
+      }
+      logPush(mkRec(null, myKey.indexOf('ready') === 0 ? 'ready'
+        : (myKey.indexOf('serve') === 0 ? 'serve' : 'incoming'), false, brain.lastError));
+      brain.askedKey = '';
+      brain.nextRetryAt = performance.now() + BRAIN_RETRY_MS;
+      updateBrainUI();
+    })
+    .then(() => { brain.inflight = false; maybeNextRound(); });
+}
+
+function applyDecision(d, key) {
+  const kind = key.indexOf('ready') === 0 ? 'ready'
+    : (key.indexOf('serve') === 0 ? 'serve' : 'incoming');
+  if (!d || d.ok === false) {
+    brain.online = false;
+    brain.lastError = (d && d.error) || '模型返回异常';
+    brain.askedKey = '';
+    brain.nextRetryAt = performance.now() + BRAIN_RETRY_MS;
+    logPush(mkRec(d, kind, false, brain.lastError));
+    updateBrainUI();
+    return;
+  }
+  if (key !== brain.askedKey) return;            // 迟到的旧决策，丢掉
+  const L = LEVELS[difficulty];
+  brain.online = true;
+  brain.lastError = '';
+  brain.model = d.model || brain.model;
+  const cLo = WALL_T + PH / 2, cHi = WALL_B - PH / 2;
+  // 待命决策只说「站哪等」，不覆盖这一板的拦截目标
+  if (kind !== 'ready' && typeof d.move_to === 'number') brain.target = clamp(d.move_to, cLo, cHi);
+  if (typeof d.recover_to === 'number') brain.recoverTo = clamp(d.recover_to, cLo, cHi);
+  if (kind === 'ready' && d.ready) brain.ready = String(d.ready);
+  if (typeof d.speed === 'number') brain.speed = clamp(d.speed, 0, L.speedLimit);
+  if (typeof d.serve_vy === 'number') brain.serveVy = clamp(d.serve_vy, -1, 1);
+  if (d.note) { jevSay.text = String(d.note).slice(0, 24); jevSay.life = 2.2; }
+  /* 模型的思考内容：只用于展示与统计 */
+  if (d.band) { brain.band = String(d.band); }
+  if (typeof d.band_center === 'number') brain.bandCenter = d.band_center;
+  /* 纯驱动模式：它选的就是拍位，落点判断拿这个当预测值 */
+  if (d.place) brain.band = String(d.place);
+  if (typeof d.place_y === 'number') brain.bandCenter = d.place_y;
+  if (typeof d.band_confidence === 'number') brain.bandConf = d.band_confidence;
+  brain.probs = d.band_probabilities || null;
+  if (d.aim) brain.aim = String(d.aim);
+  if (d.usage && typeof d.usage.input_tokens === 'number') brain.tokens += d.usage.input_tokens;
+  if (typeof d.cost_usd === 'number') brain.costUsd += d.cost_usd;
+  brain.pendingRec = mkRec(d, kind, true, '');
+  logPush(brain.pendingRec);
+  updateBrainUI();
+}
+
+function checkBrain() {
+  brain.online = null;
+  brain.lastError = '';
+  updateBrainUI();
+  fetch(relayURL + '/jev/health')
+    .then(r => r.json())
+    .then(d => {
+      brain.model = d.model || '';
+      brain.mode = d.mode || 'assisted';
+      if (typeof d.pure_speed_cap_px_s === 'number') brain.pureCap = d.pure_speed_cap_px_s;
+      brain.online = !!d.ok;
+      if (!d.ok) brain.lastError = d.configured === false ? '中继未配置模型' : '大脑未就绪';
+      updateBrainUI();
+    })
+    .catch(() => {
+      brain.online = false;
+      brain.lastError = '连不上中继 ' + relayURL;
+      updateBrainUI();
+    });
+}
+
+/* 伺服：唯一被执行的动作就是「拍面中心朝模型给的目标移动」 */
+function updateJev(dt) {
+  jev.py = jev.y;
+  const incoming = (phase === 'rally' && ball.vx > 0) || (phase === 'serve' && serveDir < 0);
+  const goalCenter = incoming ? brain.target : brain.recoverTo;
+  const limit = Math.min(brain.speed, speedLimitNow());
+  const step = clamp(goalCenter - PH / 2 - jev.y, -Math.max(0, limit) * dt, Math.max(0, limit) * dt);
+  if (brain.online !== false) jev.y += step;      // 掉线就停在原地，不做本地代打
+  jev.y = clamp(jev.y, WALL_T, WALL_B - PH);
+  jev.vy = dt > 0 ? (jev.y - jev.py) / dt : 0;
+  jev.flash = Math.max(0, jev.flash - dt * 4);
+  jevSay.life = Math.max(0, jevSay.life - dt);
+  askBrain();
+}
+
+/* 扫掠式碰撞：用上一帧位置做线段判定，避免高速穿模 */
+function tryHit(p, side, prevX, prevY) {
+  const face = side < 0 ? p.x + PW : p.x;
+  const ePrev = side < 0 ? prevX - R : prevX + R;
+  const eCurr = side < 0 ? ball.x - R : ball.x + R;
+  const crossed = side < 0 ? (ePrev >= face && eCurr <= face) : (ePrev <= face && eCurr >= face);
+  if (!crossed) return;
+  if (side < 0 && ball.vx >= 0) return;
+  if (side > 0 && ball.vx <= 0) return;
+
+  const denom = ePrev - eCurr;
+  const t = denom !== 0 ? clamp((ePrev - face) / denom, 0, 1) : 0;
+  const yAt = prevY + (ball.y - prevY) * t;
+
+  if (yAt + R < p.y - 3 || yAt - R > p.y + PH + 3) return;  // 从拍边漏过去了
+
+  ball.y = yAt;
+  ball.x = side < 0 ? face + R : face - R;
+
+  const rel = clamp((yAt - (p.y + PH / 2)) / (PH / 2), -1, 1);
+  const angle = rel * MAX_BOUNCE;
+  const speed = Math.min(ball.speed * SPEEDUP, MAX_SPEED, ballSpeedCap());
+  ball.speed = speed;
+
+  // 纯统计：模型对落点的判断准不准（不参与任何决策）
+  if (side > 0 && brain.bandCenter !== null) {
+    const rec = brain.pendingRec;
+    if (rec && rec.truth === null) {
+      rec.truth = yAt;
+      rec.correct = Math.abs(yAt - brain.bandCenter) <= PH / 4;
+    }
+    brain.pendingRec = null;
+    if (Math.abs(yAt - brain.bandCenter) <= PH / 4) brain.judgeHit++; else brain.judgeMiss++;
+    brain.bandCenter = null;
+  }
+
+  const dir = side < 0 ? 1 : -1;
+  let vx = Math.cos(angle) * speed * dir;
+  let vy = Math.sin(angle) * speed;
+  vy += clamp(p.vy, -1400, 1400) * 0.17;                    // 跟拍加转
+
+  const mag = Math.hypot(vx, vy) || 1;
+  const target = clamp(mag, speed * 0.78, speed * 1.35);
+  vx = vx / mag * target;
+  vy = vy / mag * target;
+  // 保证纵向分量下限，否则两台居中球拍会打出永不落点的水平对拉
+  const minVy = target * MIN_VY_RATIO;
+  if (Math.abs(vy) < minVy) vy = (vy > 0 ? 1 : vy < 0 ? -1 : (Math.random() < 0.5 ? -1 : 1)) * minVy;
+  ball.vx = vx;
+  ball.vy = vy;
+
+  rally++;
+  if (rally > bestRally) bestRally = rally;
+  p.flash = 1;
+  if (side < 0) newApproach();   // 球转向 JEV：这是一个新的回合，该问模型了
+  shake = Math.min(0.6, 0.25 + speed / MAX_SPEED * 0.5);
+  const col = side < 0 ? '#ff4d6d' : '#22d3ee';
+  for (let i = 0; i < 12; i++) burst(ball.x, ball.y, col, 0.55);
+  sfx(side < 0 ? 440 : 620, 0.06, 'square', 0.06, side < 0 ? 700 : 380);
+}
+
+/* ============================== 每帧更新 ============================== */
+function update(dt) {
+  time += dt;
+  updateParts(dt);
+  shake = Math.max(0, shake - dt * 3.4);
+  flashAlpha = Math.max(0, flashAlpha - dt * 1.8);
+  if (banner.life > 0) banner.life -= dt;
+
+  if (phase === 'menu' || phase === 'over') {
+    human.y = MID_Y - PH / 2 + Math.sin(time * 1.1) * 34;
+    jev.y = MID_Y - PH / 2 + Math.sin(time * 1.1 + 1.6) * 34;
+    ball.x = NET_X; ball.y = MID_Y;
+    ball.trail.length = 0;
+    return;
+  }
+
+  updateHuman(dt);
+
+  if (phase === 'serve') {
+    updateJev(dt);
+    serveTimer -= dt;
+    if (serveDir > 0) { ball.x = HUMAN_X + PW + R + 4; ball.y = human.y + PH / 2; }
+    else { ball.x = JEV_X - R - 4; ball.y = jev.y + PH / 2; }
+    ball.trail.length = 0;
+    if (serveTimer <= 0) launch();
+    return;
+  }
+
+  if (phase === 'point') {
+    updateJev(dt);
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+    ball.vx *= 0.995;
+    pointTimer -= dt;
+    if (pointTimer <= 0) afterPoint();
+    return;
+  }
+
+  // ---- rally ----
+  const prevX = ball.x, prevY = ball.y;
+  ball.x += ball.vx * dt;
+  ball.y += ball.vy * dt;
+
+  if (ball.y - R < WALL_T) {
+    ball.y = WALL_T + R; ball.vy = Math.abs(ball.vy);
+    for (let i = 0; i < 4; i++) burst(ball.x, ball.y, '#8ea0c4', 0.4);
+    sfx(300, 0.04, 'sine', 0.035, 260);
+  } else if (ball.y + R > WALL_B) {
+    ball.y = WALL_B - R; ball.vy = -Math.abs(ball.vy);
+    for (let i = 0; i < 4; i++) burst(ball.x, ball.y, '#8ea0c4', 0.4);
+    sfx(300, 0.04, 'sine', 0.035, 260);
+  }
+
+  updateJev(dt);
+  tryHit(human, -1, prevX, prevY);
+  tryHit(jev, 1, prevX, prevY);
+
+  ball.trail.push({ x: ball.x, y: ball.y });
+  if (ball.trail.length > 16) ball.trail.shift();
+
+  if (ball.x + R < TABLE.x) scorePoint('jev');
+  else if (ball.x - R > TABLE.x + TABLE.w) scorePoint('human');
+}
+
+/* ============================== 渲染 ============================== */
+function drawFloor() {
+  const g = ctx.createRadialGradient(NET_X, -120, 60, NET_X, H * 0.55, H * 1.15);
+  g.addColorStop(0, '#182741');
+  g.addColorStop(0.55, '#0a1120');
+  g.addColorStop(1, '#05070d');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawTable() {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.75)';
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetY = 16;
+  const g = ctx.createLinearGradient(0, TABLE.y, 0, TABLE.y + TABLE.h);
+  g.addColorStop(0, '#164b8a');
+  g.addColorStop(0.5, '#0f3260');
+  g.addColorStop(1, '#0a2444');
+  ctx.fillStyle = g;
+  rr(ctx, TABLE.x, TABLE.y, TABLE.w, TABLE.h, 14);
+  ctx.fill();
+  ctx.restore();
+
+  // 台面高光
+  const hg = ctx.createLinearGradient(0, TABLE.y, 0, TABLE.y + TABLE.h * 0.5);
+  hg.addColorStop(0, 'rgba(255,255,255,.10)');
+  hg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = hg;
+  rr(ctx, TABLE.x, TABLE.y, TABLE.w, TABLE.h, 14);
+  ctx.fill();
+
+  // 边线
+  ctx.strokeStyle = 'rgba(226,240,255,.62)';
+  ctx.lineWidth = 3;
+  rr(ctx, TABLE.x + 1.5, TABLE.y + 1.5, TABLE.w - 3, TABLE.h - 3, 13);
+  ctx.stroke();
+
+  // 中线
+  ctx.strokeStyle = 'rgba(226,240,255,.30)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(NET_X, TABLE.y + 6); ctx.lineTo(NET_X, TABLE.y + TABLE.h - 6); ctx.stroke();
+}
+
+function drawNet() {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,.20)';
+  ctx.lineWidth = 1;
+  for (let y = WALL_T + 4; y < WALL_B; y += 8) {
+    ctx.beginPath(); ctx.moveTo(NET_X - 11, y); ctx.lineTo(NET_X + 11, y); ctx.stroke();
+  }
+  ctx.shadowColor = 'rgba(180,220,255,.85)';
+  ctx.shadowBlur = 14;
+  ctx.strokeStyle = 'rgba(240,250,255,.9)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(NET_X, WALL_T); ctx.lineTo(NET_X, WALL_B); ctx.stroke();
+  ctx.restore();
+}
+
+function drawPaddle(p, color, soft) {
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 16 + p.flash * 34;
+  const g = ctx.createLinearGradient(p.x, p.y, p.x + PW, p.y + PH);
+  g.addColorStop(0, soft);
+  g.addColorStop(1, color);
+  ctx.fillStyle = g;
+  rr(ctx, p.x, p.y, PW, PH, PW / 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = 0.34 * p.flash;
+  ctx.fillStyle = '#fff';
+  rr(ctx, p.x - 3, p.y - 3, PW + 6, PH + 6, (PW + 6) / 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawTrail() {
+  const n = ball.trail.length;
+  for (let i = 0; i < n; i++) {
+    const t = ball.trail[i], a = (i / n) * 0.46;
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(255,206,84,' + a.toFixed(3) + ')';
+    ctx.arc(t.x, t.y, R * (0.35 + 0.6 * (i / n)), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawBall() {
+  ctx.save();
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(ball.x + 8, ball.y + 12, R * 1.05, R * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,196,64,.95)';
+  ctx.shadowBlur = 22;
+  const g = ctx.createRadialGradient(ball.x - R * 0.35, ball.y - R * 0.4, 1, ball.x, ball.y, R);
+  g.addColorStop(0, '#fff7e0');
+  g.addColorStop(0.6, '#ffc93c');
+  g.addColorStop(1, '#f08b1d');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(ball.x, ball.y, R, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawParts() {
+  for (const p of parts) {
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawAim() {
+  if (!brain.showCmd) return;
+  if (phase !== 'rally' && phase !== 'serve') return;
+  const incoming = (phase === 'rally' && ball.vx > 0) || (phase === 'serve' && serveDir < 0);
+  const y = incoming ? brain.target : brain.recoverTo;
+  ctx.save();
+  ctx.setLineDash([5, 6]);
+  ctx.strokeStyle = incoming ? 'rgba(34,211,238,.5)' : 'rgba(142,160,196,.32)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(NET_X + 40, y); ctx.lineTo(jev.x - 6, y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.font = '600 11px ui-monospace,Menlo,monospace';
+  ctx.fillStyle = incoming ? 'rgba(34,211,238,.92)' : 'rgba(142,160,196,.65)';
+  ctx.textAlign = 'right';
+  ctx.fillText((incoming ? '模型指定落点 y=' : '模型指定待命 y=') + Math.round(y) +
+    (brain.inflight ? '  ⏳思考中' : '') +
+    (incoming && brain.band ? '  [' + brain.band + ' ' + Math.round(brain.bandConf * 100) + '%]' : ''), jev.x - 12, y + 4);
+  ctx.restore();
+}
+
+/* JEV 说的垃圾话（来自模型返回的 note 字段） */
+function drawJevSay() {
+  if (jevSay.life <= 0 || !jevSay.text) return;
+  const a = clamp(jevSay.life / 0.6, 0, 1);
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.font = '600 13px -apple-system,"PingFang SC",system-ui,sans-serif';
+  const w = ctx.measureText(jevSay.text).width + 22;
+  const bx = clamp(jev.x + PW - w, NET_X + 30, W - 12 - w);
+  const by = clamp(jev.y - 46, TABLE.y + 6, WALL_B - 40);
+  ctx.fillStyle = 'rgba(6,18,28,.88)';
+  rr(ctx, bx, by, w, 30, 10);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(34,211,238,.55)';
+  ctx.lineWidth = 1;
+  rr(ctx, bx, by, w, 30, 10);
+  ctx.stroke();
+  ctx.fillStyle = '#a5f3fc';
+  ctx.textAlign = 'center';
+  ctx.fillText(jevSay.text, bx + w / 2, by + 20);
+  ctx.restore();
+}
+
+function drawHUD() {
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.font = '700 17px -apple-system,"PingFang SC",system-ui,sans-serif';
+  ctx.fillStyle = '#ff4d6d';
+  ctx.fillText('人类', TABLE.x + 4, 42);
+  ctx.font = '400 12px -apple-system,"PingFang SC",system-ui,sans-serif';
+  ctx.fillStyle = 'rgba(142,160,196,.95)';
+  ctx.fillText('YOU · 左侧', TABLE.x + 4, 62);
+
+  ctx.textAlign = 'right';
+  ctx.font = '700 17px -apple-system,"PingFang SC",system-ui,sans-serif';
+  ctx.fillStyle = '#22d3ee';
+  ctx.fillText('JEV', TABLE.x + TABLE.w - 4, 42);
+  ctx.font = '400 12px -apple-system,"PingFang SC",system-ui,sans-serif';
+  ctx.fillStyle = 'rgba(142,160,196,.95)';
+  ctx.fillText('AI · 右侧 · ' + LEVELS[difficulty].name, TABLE.x + TABLE.w - 4, 62);
+
+  // 大脑状态（大模型连接 / 延迟 / 报错）
+  ctx.font = '400 11.5px -apple-system,"PingFang SC",system-ui,sans-serif';
+  if (brain.online === false) {
+    ctx.fillStyle = 'rgba(255,120,140,.95)';
+    ctx.fillText('⚠ JEV 大脑掉线' + (brain.lastError ? ' · ' + brain.lastError : ''), TABLE.x + TABLE.w - 4, 80);
+  } else if (brain.online === null) {
+    ctx.fillStyle = 'rgba(255,214,102,.9)';
+    ctx.fillText('◦ 正在连接大脑…', TABLE.x + TABLE.w - 4, 80);
+  } else {
+    ctx.fillStyle = 'rgba(80,220,180,.92)';
+    /* 显示的是「典型反应速度」(滑动平均)，不是上一次的离群值——
+       实测对方的抖动能让单次决策慢到 9.9s，那不是它的常态。
+       单次的精确值与耗时构成在决策日志里逐条可查。 */
+    const typ = Math.round(brainLatencyS() * 1000);
+    const outlier = brain.latency && brain.latency > typ * 2;
+    ctx.fillText('● ' + (brain.model || 'model') + ' · ' + typ + 'ms' +
+      (outlier ? '（上次 ' + brain.latency + 'ms）' : '') +
+      (brain.late ? ' · 慢掉 ' + brain.late + ' 次' : '') +
+      (brain.inflight ? ' · 思考中' : ''), TABLE.x + TABLE.w - 4, 80);
+  }
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(142,160,196,.85)';
+  ctx.fillText('机械臂限速 ' + LEVELS[difficulty].speedLimit + ' px/s', TABLE.x + 4, 80);
+
+  // 比分
+  ctx.textAlign = 'center';
+  ctx.font = '800 42px ui-monospace,Menlo,monospace';
+  ctx.fillStyle = '#ff4d6d';
+  ctx.fillText(String(scoreH), NET_X - 58, 52);
+  ctx.fillStyle = 'rgba(200,215,240,.45)';
+  ctx.font = '300 28px ui-monospace,Menlo,monospace';
+  ctx.fillText(':', NET_X, 50);
+  ctx.font = '800 42px ui-monospace,Menlo,monospace';
+  ctx.fillStyle = '#22d3ee';
+  ctx.fillText(String(scoreJ), NET_X + 58, 52);
+
+  // 信息行：局数 / 大比分 / 发球方 / 本回合
+  let info = '第 ' + (gamesH + gamesJ + 1) + ' 局 · 大比分 ' + gamesH + ' - ' + gamesJ + ' · 先赢 ' + WIN_GAMES + ' 局';
+  if (phase === 'serve' || phase === 'rally') {
+    info += ' · ' + (serverFor(totalPoints) === 'human' ? '人类发球' : 'JEV 发球');
+    if (rally > 0) info += ' · 本回合 ' + rally + ' 拍';
+  }
+  ctx.font = '400 12px -apple-system,"PingFang SC",system-ui,sans-serif';
+  ctx.fillStyle = 'rgba(142,160,196,.92)';
+  ctx.fillText(info, NET_X, 80);
+
+  // 球速条：当前球速占上限的比例（一板球里会随击球次数一格一格涨上去）
+  const cap = ballSpeedCap();
+  const pct = clamp(cap > 0 ? ball.speed / cap : 0, 0, 1);
+  const bw = 240, bx = NET_X - bw / 2, by = H - 25;
+  ctx.fillStyle = 'rgba(255,255,255,.08)';
+  rr(ctx, bx, by, bw, 6, 3); ctx.fill();
+  const bg = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+  bg.addColorStop(0, '#22d3ee'); bg.addColorStop(0.6, '#ffd166'); bg.addColorStop(1, '#ff4d6d');
+  ctx.fillStyle = bg;
+  rr(ctx, bx, by, Math.max(6, bw * pct), 6, 3); ctx.fill();
+  ctx.font = '400 11px -apple-system,"PingFang SC",system-ui,sans-serif';
+  ctx.fillStyle = 'rgba(142,160,196,.85)';
+  ctx.fillText('球速 ' + Math.round(ball.speed) + ' / ' + Math.round(cap) + ' px/s · 每板 ×' + SPEEDUP +
+    ' · 最长回合 ' + bestRally + ' 拍', NET_X, by - 6);
+
+  // 模型侧信息：时间基准被它的延迟压到多少、判断得多准、花了多少钱
+  if (brain.online !== false && brain.showCmd) {
+    const ly = H - 8, span = 250;
+    ctx.font = '600 11px ui-monospace,Menlo,monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(34,211,238,.88)';
+    ctx.fillText((brain.mode === 'pure' ? '纯驱动 · ' : '') +
+      '延迟 ' + brainLatencyS().toFixed(1) + 's' +
+      (brain.multi ? (brain.round > 0 ? ' ×' + (brain.round + 1) : ' ×1') : ' 单判') +
+      ' · 球速上限 ' + Math.round(cap) + ' px/s',
+      NET_X - span, ly);
+    ctx.textAlign = 'right';
+    const judged = brain.judgeHit + brain.judgeMiss;
+    let right = judged ? ('落点判断 ' + brain.judgeHit + '/' + judged) : '';
+    if (brain.costUsd > 0) right += (right ? ' · ' : '') + '$' + brain.costUsd.toFixed(4) + ' · ' + brain.tokens + ' tok';
+    ctx.fillStyle = 'rgba(142,160,196,.8)';
+    ctx.fillText(right, NET_X + span, ly);
+    ctx.textAlign = 'center';
+  }
+  ctx.restore();
+}
+
+function drawBanner() {
+  if (banner.life <= 0) return;
+  const a = clamp(banner.life, 0, 1);
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.textAlign = 'center';
+  ctx.font = '800 40px -apple-system,"PingFang SC",system-ui,sans-serif';
+  ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 18;
+  ctx.fillStyle = '#eaf2ff';
+  ctx.fillText(banner.text, NET_X, MID_Y - 118);
+  if (banner.sub) {
+    ctx.font = '400 15px -apple-system,"PingFang SC",system-ui,sans-serif';
+    ctx.fillStyle = 'rgba(190,208,240,.92)';
+    ctx.fillText(banner.sub, NET_X, MID_Y - 88);
+  }
+  ctx.restore();
+}
+
+function render() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  drawFloor();
+
+  ctx.save();
+  if (shake > 0) ctx.translate((Math.random() * 2 - 1) * shake * 7, (Math.random() * 2 - 1) * shake * 7);
+
+  drawTable();
+  drawAim();
+  drawNet();
+  drawPaddle(human, '#ff4d6d', '#ff9db0');
+  drawPaddle(jev, '#22d3ee', '#a5f3fc');
+  drawTrail();
+  drawBall();
+  drawParts();
+  drawJevSay();
+  ctx.restore();
+
+  if (flashAlpha > 0) {
+    ctx.save();
+    const g = ctx.createLinearGradient(flashSide > 0 ? W : 0, 0, flashSide > 0 ? W * 0.45 : W * 0.55, 0);
+    g.addColorStop(0, (flashSide > 0 ? 'rgba(34,211,238,' : 'rgba(255,77,109,') + flashAlpha.toFixed(2) + ')');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  drawHUD();
+  drawBanner();
+}
+
+/* ============================== 主循环 ============================== */
+let last = performance.now();
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  if (!isFinite(dt) || dt < 0) dt = 0;
+  dt = Math.min(dt, 1 / 30);
+  if (!paused) update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+resolveRelay();
+syncOverlays();
+updateBrainUI();
+updateLogBadge();
+checkBrain();
+})();
+</script>
+</body>
+</html>

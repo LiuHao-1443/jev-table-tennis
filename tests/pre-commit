@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# 提交前的秘钥守卫。装上：
+#     cp tests/pre-commit .git/hooks/pre-commit
+#     chmod +x .git/hooks/pre-commit
+#
+# 它做两件事：
+#   1. 拦住任何被 .gitignore 漏掉的配置文件
+#   2. 在即将提交的内容里搜真实秘钥（拿 jev.config.json 里的值去比对）
+set -u
+fail=0
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+
+# 1) 明显不该进版本库的文件
+for f in jev.config.json .env .env.local; do
+  if echo "$staged" | grep -qx "$f"; then
+    echo "✗ $f 被加入了提交（它应该被 .gitignore 挡住）"
+    fail=1
+  fi
+done
+
+# 2) 拿真实秘钥值去比对即将提交的内容
+KEY="$(python3 - <<'PY' 2>/dev/null
+import json, os
+for p in ("jev.config.json", os.path.expanduser("~/.jev.config.json")):
+    if os.path.exists(p):
+        try:
+            d = json.load(open(p, encoding="utf-8"))
+            k = str(d.get("api_key") or d.get("key") or "").strip()
+            if k and not k.startswith("在此填入"):
+                print(k); break
+        except Exception:
+            pass
+PY
+)"
+
+for f in $staged; do
+  [ -f "$f" ] || continue
+
+  if [ -n "$KEY" ] && grep -qF "$KEY" "$f" 2>/dev/null; then
+    # 只报位置，绝不回显内容 —— 否则守卫自己就把秘钥刷进终端和 CI 日志了
+    echo "✗ $f 里出现了真实 API key（内容已隐去）"
+    fail=1
+  fi
+
+  # 注意：grep|grep|sed 的退出码是 sed 的，永远为 0 —— 必须先把结果收进变量再判断
+  hit=$(grep -nEI "sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|(api[_-]?key|secret|password)[\"']?[[:space:]]*[:=][[:space:]]*[\"'][^\"']{16,}[\"']" "$f" 2>/dev/null \
+        | grep -v "jev.config.example.json" | grep -v "在此填入")
+  if [ -n "$hit" ]; then
+    # 同样只报行号，不打印命中的字符串
+    for ln in $(echo "$hit" | cut -d: -f1); do
+      echo "✗ $f:$ln 疑似硬编码凭据（内容已隐去）"
+    done
+    fail=1
+  fi
+done
+
+if [ "$fail" != 0 ]; then
+  echo
+  echo "提交已拦下。这条报错是误报、确认无误要提交：git commit --no-verify"
+  exit 1
+fi
+exit 0

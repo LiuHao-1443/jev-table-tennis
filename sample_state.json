@@ -1,0 +1,7 @@
+{"kind":"incoming",
+ "table":{"y_top":96,"y_bottom":581,"x_left":78,"x_right":1042},
+ "ball":{"x":600,"y":300,"vx":700,"vy":260,"r":10,"speed":430},
+ "you":{"side":"right","paddle_x":900,"paddle_half":56,"paddle_center":338,"max_speed":900,"machine_heat":1,"time_to_arrival_s":0.414},
+ "opponent":{"paddle_x":100,"paddle_center":200},
+ "score":{"you":3,"opponent":5},"games":{"you":0,"opponent":1},"rally":7,
+ "physics":{"max_bounce_angle_rad":0.92,"speedup_per_hit":1.045,"max_ball_speed":1180,"min_vy_ratio":0.13}}

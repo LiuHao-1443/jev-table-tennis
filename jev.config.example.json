@@ -1,0 +1,7 @@
+{
+  "endpoint": "https://api.typesafe.ai/v1/systemone",
+  "model": "jev-latest",
+  "api_key": "在此填入你的 TypeSafe key",
+  "port": 8760,
+  "timeout": 30
+}
