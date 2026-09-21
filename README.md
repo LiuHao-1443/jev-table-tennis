@@ -173,6 +173,24 @@ A keep-alive connection can only carry one request at a time, so the relay runs 
 connections**. Measured with three simultaneous players, each player's per-decision median stayed at
 the single-player number (~360ms) — no queueing.
 
+## Local brain (experimental)
+
+The relay can run its decisions on a local System One model instead of the cloud API —
+[laya-mlx](https://github.com/mizorewww/laya-mlx) (`--brain laya`, MLX on Apple Silicon, ~70ms per
+decision, $0, no key, no network). It speaks the same `type: choice` + `criteria` shape, so the decode
+path is unchanged: the chosen label is still the pixel value, and the relay still owns no algorithm.
+
+```bash
+python3 server.py --cap 650                                   # cloud JEV on :8760
+./.venv-laya/bin/python server.py --brain laya --port 8761 --cap 650   # local on :8761
+```
+
+Measured on the same 232 archived real positions (56px tolerance): **JEV 47.5px median error / 53%
+reachable vs Laya 69–120px / 22–34%**, and all three Laya checkpoints collapse onto one or two options
+regardless of where the ball is. It is a 421M encoder for text-shaped typed decisions; multi-step
+spatial projection is simply not in its capability set. Kept as an option — and as a second model the
+instrument can score.
+
 ## Security
 
 - **The API key lives only inside the `server.py` process.** There is no credential in the page, so

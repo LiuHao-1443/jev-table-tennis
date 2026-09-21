@@ -153,6 +153,23 @@ HUD 上能看到它在想什么：指令线旁是它选的落点和置信度，�
 一条 keep-alive 连接一次只能跑一个请求，所以中继开了 **4 个连接的池子**：
 实测三个人同时打，每人每板的中位耗时和单人时是同一个数（~360ms），互不排队。
 
+## 本地大脑（实验）
+
+中继可以把决策换成**本地的 System One 模型**（[laya-mlx](https://github.com/mizorewww/laya-mlx)，
+`--brain laya`，Apple Silicon 上的 MLX，一次决策约 70ms，￥0，不要 key、不出网络）。
+它的接口形状相同（`type: choice` + `criteria` 标签→描述），所以解码路径一行没改：
+它选的标签仍然就是像素值，中继自己依旧没有任何算法。
+
+```bash
+python3 server.py --cap 650                                    # 云端 JEV，:8760
+./.venv-laya/bin/python server.py --brain laya --port 8761 --cap 650   # 本地，:8761
+```
+
+同一批 232 个真实局面实测（容错 56px）：**JEV 误差中位 47.5px / 够得着 53%，
+Laya 69~120px / 22~34%**，而且它的三个 checkpoint 都会塌缩到一两档上，不管球在哪。
+它是给文本类决策做的 421M 编码器，多步空间外推不在它的能力面上。
+留着当选项——也当一个「评测仪能打分的第二个模型」。
+
 ## 安全
 
 - **API key 只存在于 `server.py` 进程里。** 页面里没有任何凭据，抓包也拿不到；

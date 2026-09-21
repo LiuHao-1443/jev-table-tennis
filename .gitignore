@@ -15,3 +15,8 @@ nodecheck.tsv
 
 # macOS
 .DS_Store
+
+# 本地 System One（laya-mlx）实验环境
+.venv-laya/
+models/
+*.safetensors

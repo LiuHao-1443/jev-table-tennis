@@ -43,6 +43,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(HERE, "jev.config.json")
 MOCK = "--mock-brain" in sys.argv
 CAP_OVERRIDE = None    # --cap N：手动指定 pure 模式的球速上限（px/s）
+BRAIN = "jev"          # --brain jev | laya：决策由谁做（laya = 本地 MLX 模型，不要 key、不要网络）
+LAYA_MODEL = "aac6fef/laya-typed-decisions-mlx"   # --laya-model 可换 checkpoint
+PORT_OVERRIDE = None   # --port N：换个端口起第二份中继，方便两个大脑左右对比
 HOST = "0.0.0.0"       # --host 127.0.0.1 可以只绑本机（默认让局域网里别人也能玩）
 
 # ---------------------------------------------------------------------------
@@ -73,8 +76,28 @@ for _i, _a in enumerate(sys.argv):
             CAP_OVERRIDE = float(_a.split("=", 1)[1])
         except ValueError:
             raise SystemExit("--cap 需要一个数字（px/s）")
+    elif _a == "--brain" and _i + 1 < len(sys.argv):
+        BRAIN = sys.argv[_i + 1]
+    elif _a.startswith("--brain="):
+        BRAIN = _a.split("=", 1)[1]
+    elif _a == "--port" and _i + 1 < len(sys.argv):
+        try:
+            PORT_OVERRIDE = int(sys.argv[_i + 1])
+        except ValueError:
+            raise SystemExit("--port 需要一个整数")
+    elif _a.startswith("--port="):
+        try:
+            PORT_OVERRIDE = int(_a.split("=", 1)[1])
+        except ValueError:
+            raise SystemExit("--port 需要一个整数")
+    elif _a == "--laya-model" and _i + 1 < len(sys.argv):
+        LAYA_MODEL = sys.argv[_i + 1]
+    elif _a.startswith("--laya-model="):
+        LAYA_MODEL = _a.split("=", 1)[1]
 if MODE not in ("pure", "assisted"):
     raise SystemExit("--mode 只能是 pure 或 assisted")
+if BRAIN not in ("jev", "laya"):
+    raise SystemExit("--brain 只能是 jev（云端 TypeSafe）或 laya（本地 MLX）")
 
 # pure 模式下的球速上限：固定值，由「假设延迟 2.0s」推出来，与实测延迟无关
 MAX_SPEED_CAP = 1180.0          # 球速的物理天花板（与前端 MAX_SPEED 一致）
@@ -497,6 +520,48 @@ def _new_conn():
     return http.client.HTTPConnection(host, port, timeout=CFG["timeout"])
 
 
+_laya_lock = threading.Lock()
+_laya_agent = None
+
+
+def laya_load():
+    """加载本地模型（懒加载，只做一次）。第一次约 1 秒 + 首问约 1.7 秒预热。"""
+    global _laya_agent
+    if _laya_agent is None:
+        try:
+            import laya_mlx as laya
+        except ImportError as exc:
+            raise RuntimeError(
+                "本地后端需要 3.11+ 的 Python 环境和 laya-mlx：\n"
+                "  /opt/homebrew/bin/python3.13 -m venv .venv-laya\n"
+                "  ./.venv-laya/bin/pip install laya-mlx\n"
+                "  然后用 ./.venv-laya/bin/python server.py --brain laya 启动\n"
+                "（原报错：%s）" % exc)
+        _laya_agent = laya.load(LAYA_MODEL)
+    return _laya_agent
+
+
+def call_laya(state_text, questions):
+    """本地 System One（laya-mlx）做同一个决策。
+
+    关键：它返回的形状和云端 JEV 一模一样（answers[name] = {type, choice, confidence,
+    probabilities}），所以后面的 decode_pure 一行都不用改 ——
+    它选的标签仍然【就是】拍子要去的那个 y，本地依旧只有查表 + 伺服。
+    """
+    agent = laya_load()
+    t0 = time.perf_counter()
+    with _laya_lock:                      # MLX 不是线程安全的，而中继是多线程的
+        try:
+            out = agent.predict(state_text, questions)
+        except TypeError:                 # 老版本 API 叫 system_one
+            out = agent.system_one(state_text, questions)
+    _tl.timing = {"connect_ms": 0.0, "retried": False,
+                  "model_ms": (time.perf_counter() - t0) * 1000.0}
+    answers = dict(out.get("answers") or {})
+    usage = dict(out.get("usage") or {})
+    return answers, usage, str(out.get("model") or "laya")
+
+
 def call_jev(state_text, questions):
     if not CFG["api_key"]:
         raise RuntimeError("未配置 JEV_API_KEY（环境变量或 jev.config.json）")
@@ -780,14 +845,17 @@ class Handler(BaseHTTPRequestHandler):
             if not self._origin_ok():
                 self._send(403, {"ok": False, "error": "origin not allowed"}, cors=False)
                 return
+            _local = (BRAIN == "laya")
             self._send(200, {
-                "ok": bool(CFG["api_key"]) or MOCK,
-                "model": "mock-brain" if MOCK else CFG["model"],
-                "endpoint": CFG["endpoint"],
+                "ok": bool(CFG["api_key"]) or MOCK or _local,
+                "model": "mock-brain" if MOCK else (LAYA_MODEL if _local else CFG["model"]),
+                "endpoint": "local:laya-mlx" if _local else CFG["endpoint"],
+                "brain": "mock" if MOCK else BRAIN,
+                "local": _local,
                 "mock": MOCK,
                 "mode": MODE,
                 "pure_speed_cap_px_s": pure_speed_cap(),
-                "configured": bool(CFG["api_key"]),
+                "configured": bool(CFG["api_key"]) or _local,
                 "price_per_input_token_usd": PRICE_PER_INPUT_TOKEN_USD,
             })
             return
@@ -836,6 +904,8 @@ class Handler(BaseHTTPRequestHandler):
             questions = build_questions(state, serving)
             if MOCK:
                 answers, usage, model = mock_answers(state, serving)
+            elif BRAIN == "laya":
+                answers, usage, model = call_laya(text, questions)
             else:
                 answers, usage, model = call_jev(text, questions)
             out = decode(answers, state, serving)
@@ -850,7 +920,7 @@ class Handler(BaseHTTPRequestHandler):
                 "retried": timing.get("retried", False),
                 "model_ms": timing.get("model_ms"),
                 "usage": {"input_tokens": in_tok, "output_tokens": out_tok},
-                "cost_usd": round(in_tok * PRICE_PER_INPUT_TOKEN_USD, 8),
+                "cost_usd": 0.0 if BRAIN == "laya" else round(in_tok * PRICE_PER_INPUT_TOKEN_USD, 8),
                 # 完整过程：它看到了什么、被问了什么、每个问题给出的分布是什么
                 "trace": {
                     "state_text": text,
@@ -954,7 +1024,7 @@ def lan_ip():
 
 
 def main():
-    port = CFG["port"]
+    port = PORT_OVERRIDE or CFG["port"]
     print("=" * 66)
     print(" JEV 大脑中继（TypeSafe SystemOne）  http://127.0.0.1:%d" % port)
     if MODE == "pure":
@@ -970,8 +1040,22 @@ def main():
     else:
         print(" 模式：assisted —— 带本地辅助（本地替它算到达时间 + 区间取中点 + aim/power 换算）")
         print("         这是为了好玩调过的版本，用来当对照")
+    if BRAIN == "laya":
+        print(" 大脑：本地 System One（laya-mlx · %s）" % LAYA_MODEL)
+        print("       不出网络、不要 API key、不花钱；输出 0 token")
+        t_load = time.time()
+        try:
+            agent = laya_load()
+            agent.predict("warm up", {"q": {"type": "choice", "instructions": "warm up",
+                                            "criteria": ["a", "b"]}})
+            print("       已预加载（%.1fs，含预热）—— 第一板不会慢" % (time.time() - t_load))
+        except Exception as exc:  # noqa: BLE001
+            print("       加载失败：%s" % exc)
+            raise SystemExit(1)
     if MOCK:
         print(" 另：--mock-brain（测试替身，不调用模型）")
+    elif BRAIN == "laya":
+        print(" 决策全部由本地模型做；中继自己不算任何东西（它选的标签就是拍子要去的 y）")
     else:
         print(" endpoint : %s" % CFG["endpoint"])
         print(" model    : %s" % CFG["model"])

@@ -47,6 +47,7 @@ run "超时≠掉线"  "$JSC" tests/jev_timeout_test.js
 run "归因审计"   "$JSC" tests/jev_attribution.js
 run "纯模式"     python3 tests/jev_pure_test.py
 run "局域网地址" python3 tests/jev_lan_test.py
+run "本地大脑"   python3 tests/jev_laya_test.py
 run "陈旧连接"   python3 tests/jev_stale_test.py
 
 echo
